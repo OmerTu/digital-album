@@ -24,10 +24,12 @@ n_pages = len(PAGES)
 n_hero = sum(1 for p in PAGES if p["kind"] == "hero")
 n_spread = sum(1 for p in PAGES if p["kind"] == "spread") // 2
 
-PW, PH_CM = 30.0, 22.0  # page size in cm (Lupa Dutch panoramic large: 30 x 22 cm)
+PW: float | None = None
+PH_CM: float | None = None
 
 # config overrides
 LANG = "he"  # title language: "he" (Hebrew) or "en" (English); the book reads right to left either way
+COMPANY = "Picabook"
 ALBUM_TAB_TITLE = ALBUM_TITLE = "Album plan"
 ALBUM_LINE = ""
 OUTPUT_HTML = "album-plan.html"
@@ -41,12 +43,17 @@ TEXT_HALF: dict = {}
 QR_CODES: list = []
 THEMES: list = []
 THEME_NOTE = ""
-LUPA_OFFSET = None  # page numbers shown = Lupa's numbering (Lupa counts its opening-words page as page 1)  # (Hebrew fact, English source note) from the family's trip documents
+EDITOR_OFFSET = None
+LUPA_OFFSET = None  # page numbers shown = editor's numbering (0 for Picabook, +1 for Lupa opening-words page)
 sys.path.insert(0, os.getcwd())
 from album_config import *  # noqa: F401,F403,E402
+_comp_lower = str(globals().get("COMPANY", "Picabook")).lower()
+PW = float(PW) if PW is not None else (29.0 if _comp_lower == "picabook" else 30.0)
+PH_CM = float(globals().get("PH", PH_CM) or 22.0)
 LANG_NAME = {"he": "Hebrew", "en": "English"}.get(LANG, LANG)
 OPENING_SPAN = f"<span>{escape(OPENING_TEXT_HE)}</span>" if globals().get("OPENING_TEXT_SHOW", True) else ""
-OFF = LUPA_OFFSET if LUPA_OFFSET is not None else (1 if (COVER_ONLY and OPENING_TEXT_HE) else 0)
+_ed_off = EDITOR_OFFSET if EDITOR_OFFSET is not None else LUPA_OFFSET
+OFF = _ed_off if _ed_off is not None else (0 if _comp_lower == "picabook" else (1 if (COVER_ONLY and OPENING_TEXT_HE) else 0))
 
 
 def img_b64(path: str, size: int, quality: int = 72) -> str:
@@ -307,10 +314,10 @@ def pcol(page: str, no) -> str:
 
 
 def page_html(pg: dict[str, Any] | None, side: str, bg: int | None = None) -> str:
-    """One album page (30 x 22 cm) drawn to scale. bg = photo whose blur runs across the whole open spread."""
+    """One album page (PW x PH_CM cm) drawn to scale. bg = photo whose blur runs across the whole open spread."""
     white_bg = globals().get("PAGE_BG_WHITE", True)
     if pg is None:
-        if side == "r" and COVER_ONLY and OPENING_TEXT_HE:  # Lupa's opening-words page faces page 1 (free extra page)
+        if side == "r" and OFF == 1 and COVER_ONLY and OPENING_TEXT_HE:  # Lupa's opening-words page faces page 1 (free extra page)
             ops = globals().get("OPENING_PHOTOS") or ([OPENING_PHOTO] if globals().get("OPENING_PHOTO") else [])
             op_html = "".join(tile(op["n"], op["x"], op["y"], op["w"], op["h"]) for op in ops)
             if globals().get("OPENING_BG") and os.path.exists(globals().get("OPENING_BG") or ""):  # faded photo behind the page
@@ -330,11 +337,11 @@ def page_html(pg: dict[str, Any] | None, side: str, bg: int | None = None) -> st
     elif pg.get("merged"):
         head = ""
         for t in pg["titles"]:
-            if t["sec"] in globals().get("HIDDEN_TITLES", {}).get(no, []) and (t["right"] <= 36) == (shift == 0):
+            if t["sec"] in globals().get("HIDDEN_TITLES", {}).get(no, []) and (t["right"] <= PW + 6) == (shift == 0):
                 continue  # header the user removed
-            on_left = t["right"] <= 36  # a title near the fold goes on the left page so it isn't cut
+            on_left = t["right"] <= PW + 6  # a title near the fold goes on the left page so it isn't cut
             if (shift == 0) == on_left:
-                r = min(t["right"], 29.3) if on_left else t["right"] - shift
+                r = min(t["right"], PW - 0.7) if on_left else t["right"] - shift
                 th = title_html(t.get('secs', [t['sec']]), used)
                 if no in globals().get("TITLE_RIGHT_ALIGN", set()):
                     head += f"<div class='ptitle' style='right:3.4%'>{th}</div>" if th else ""
@@ -390,21 +397,21 @@ def page_html(pg: dict[str, Any] | None, side: str, bg: int | None = None) -> st
         body = "<img class='mapimg' src='data:image/jpeg;base64,MAPIMG' alt='Route map'><div class='kindtag'>Route map · full page</div>"
     elif kind == "opening":
         body = (f"<div class='textpage opening he'><b>{escape(OPENING_TITLE_HE)}</b>{OPENING_SPAN}"
-                f"<i>{escape(OPENING_SIGN_HE)}</i></div><div class='kindtag'>Opening words · Lupa text page you can edit</div>")
+                f"<i>{escape(OPENING_SIGN_HE)}</i></div><div class='kindtag'>Opening words · editable text page</div>")
     elif kind in ("text", "closing"):
-        note = "Closing page: a few words + QR code to the trip videos" if kind == "closing" else "Short text page (a few words, or leave for notes)"
+        note = globals().get("CLOSING_TEXT_HE") or ("Closing page: a few words + QR code to the trip videos" if kind == "closing" else "Short text page (a few words, or leave for notes)")
         body = f"<div class='textpage'>{escape(note)}</div>"
     else:
         body = "".join(tile(r["n"], r["x"] - shift, r["y"], r["w"], r["h"]) for r in pg["rects"])
         if kind == "feature":
-            body += "<div class='kindtag'>Big photo · room for text in Lupa</div>"
+            body += f"<div class='kindtag'>Big photo · room for text in {escape(str(COMPANY))}</div>"
         if pg.get("merged") and kind != "intro":
             body += "<div class='kindtag'>Lay-flat spread</div>" if pg["shift"] == 0 else ""
         if kind == "intro" and pg.get("shift") and INTRO_TEXT_BOX:
             body += f"<div class='introtext he'><b>{escape(INTRO_TITLE_HE)}</b>{escape(INTRO_TEXT_HE)}</div>"
         th = TEXT_HALF.get(pg["sec"]) if pg.get("textbox") else None
         if th and (th.get("title") or th.get("text")):  # empty = space left for handwriting
-            body += (f"<div class='introtext he' style='left:{pct(1.0, PW)};top:{pct(2.4, PH_CM)};width:{pct(13.6, PW)};height:{pct(18.6, PH_CM)}'>"
+            body += (f"<div class='introtext he' style='left:{pct(1.0, PW)};top:{pct(2.4, PH_CM)};width:{pct(PW - 16.4, PW)};height:{pct(18.6, PH_CM)}'>"
                      f"<b>{escape(th['title'])}</b>{escape(th['text'])}</div>")
     for idx, q in enumerate(QR_CODES):  # QR code overlays (scan to open the linked video / album)
         if q["page"] == no:
@@ -626,7 +633,8 @@ html = f"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(ALBUM_TAB_TITLE)}</title>
-<style>{CSS}
+<style>:root{{--page-ar:{PW:g}/{PH_CM:g}}}
+{CSS}
 .facts ol{{columns:2 380px;column-gap:28px;margin:6px 0 0;padding-inline-start:22px;font-size:15px;line-height:1.5}}
 .facts li{{break-inside:avoid;margin:0 0 6px}}
 .facts .src{{display:block;direction:ltr;text-align:right;color:var(--muted);font-size:11.5px}}
@@ -660,10 +668,10 @@ html = f"""<!doctype html>
 <h3>Layout rules in this version</h3>
 <ul class="tight">
 <li><b>No cropping.</b> Each frame has the photo's own shape (16:9, 4:3, portrait, panorama). Pages are drawn to scale; average page fill is {sum(fills) / len(fills) * 100:.0f}%.</li>
-<li><b>In Lupa:</b> resize each frame to the size shown in the photo's details (cm), or turn off "fill frame". Frames are exact, so nothing gets cut.</li>
+<li><b>In {escape(str(COMPANY))}:</b> {'frames use exact cm coordinates and titles/captions stay editable native text boxes (no boxes behind text).' if _comp_lower == 'picabook' else 'resize each frame to the size shown in the photo&apos;s details (cm), or turn off &quot;fill frame&quot;. Frames are exact, so nothing gets cut.'}</li>
 <li><b>Full pages and spreads</b> keep the photo's original ratio{' on a pure white page background' if globals().get('PAGE_BG_WHITE', True) else '. A blurred copy of the same photo fills the rest of the page and continues across the facing page'}.</li>
 <li><b>Portraits stay portrait.</b></li>
-<li><b>Lay-flat spreads:</b> when both pages show the same place, they're designed as one 60×22 cm canvas and photos may cross the middle. When a spread holds two places, each place gets its own area, and the border between them may sit off the fold.</li>
+<li><b>Lay-flat spreads:</b> when both pages show the same place, they're designed as one {2 * PW:g}×{PH_CM:g} cm canvas and photos may cross the middle. When a spread holds two places, each place gets its own area, and the border between them may sit off the fold.</li>
 <li><b>Place names in {LANG_NAME}</b>, plain text with no icons or symbols.</li>
 <li><b>Margins:</b> to close wide empty margins, a frame may trim at most 5% off one side of a photo. No important detail is lost at that size. Average page fill: {sum(fills) / len(fills) * 100:.0f}%.</li>
 <li><b>Order:</b> camera time{globals().get('ORDER_NOTE', ', with wrong camera clocks fixed')}. Photos from the same place (drone shots too) are grouped.</li>
@@ -677,10 +685,10 @@ html = f"""<!doctype html>
 <h2>Route map · page {next((pg["no"] + OFF for pg in PAGES if pg["kind"] == "map"), "–")}</h2>
 <div class="card">
 <img class="mapfull" src="data:image/jpeg;base64,{map_img}" alt="Route map of the trip">
-<p class="muted">Built from your photos' own locations, 3 photos per place. The route follows real roads between stops: about {km:,.0f} km ({km / 1.609:,.0f} miles) stop to stop{f"; the map shows the real total from the RV bill, about {km_actual:,.0f} km ({km_actual / 1.609344:,.0f} miles), because the line misses driving inside the parks" if km_actual else ""}. {globals().get('MAP_NOTE', '')} Print file: <code>map/route_map.png</code> (30×22 cm at 300 dpi), ready to drop in as a full-page photo.</p>
+<p class="muted">Built from your photos' own locations, 3 photos per place. The route follows real roads between stops: about {km:,.0f} km ({km / 1.609:,.0f} miles) stop to stop{f"; the map shows the real total from the RV bill, about {km_actual:,.0f} km ({km_actual / 1.609344:,.0f} miles), because the line misses driving inside the parks" if km_actual else ""}. {globals().get('MAP_NOTE', '')} Print file: <code>map/route_map.png</code> ({PW:g}×{PH_CM:g} cm at 300 dpi), ready to drop in as a full-page photo.</p>
 </div>
 
-<h2>{globals().get('COMPANY', 'Lupa')} theme recommendations</h2>
+<h2>{escape(str(globals().get('COMPANY', 'Picabook')))} theme recommendations</h2>
 <div class="note">{globals().get('THEME_NOTE', 'Check in the album editor that the theme works with your chosen book and size before you start.')}</div>
 {''.join(theme_html)}
 
@@ -691,7 +699,7 @@ html = f"""<!doctype html>
 </table></div>
 
 <h2>Page-by-page plan</h2>
-<div class="muted">Each row is one open spread as the book reads: <b>right page first</b>, then left. Pages are drawn to scale (30×22 cm). The yellow tag is the photo number.</div>
+<div class="muted">Each row is one open spread as the book reads: <b>right page first</b>, then left. Pages are drawn to scale ({PW:g}×{PH_CM:g} cm). The yellow tag is the photo number.</div>
 <div class="toolbar">
   <button id="ba">Show: Before</button>
   <span class="muted">Jump to page</span><input type="search" id="jump" placeholder="e.g. 48">

@@ -20,6 +20,8 @@ import numpy as np
 from PIL import Image
 
 import os
+import sys
+sys.path.insert(0, os.getcwd())
 import album_config as C
 
 
@@ -32,7 +34,7 @@ def save_with_time(im: Image.Image, out: str, when: datetime, quality: int = 90)
     exif.get_ifd(0x8769)[0x9003] = t
     im.save(out, "JPEG", quality=quality, subsampling=0, dpi=(300, 300), exif=exif)
 
-TEAL = getattr(C, "QR_DEFAULT_BG", (246, 243, 236))  # page colour under the code when an entry gives no "bg"
+TEAL = getattr(C, "QR_DEFAULT_BG", (255, 255, 255))  # page colour under the code when an entry gives no "bg"
 DARK = (28, 45, 42)
 
 
@@ -67,11 +69,15 @@ def prepare(src: str, out: str, when: datetime, bg: tuple = TEAL, dark: tuple = 
 
 def main() -> None:
     """All QR codes in QR_CODES."""
+    comp = getattr(C, "COMPANY", "Picabook")
+    off = getattr(C, "EDITOR_OFFSET", getattr(C, "LUPA_OFFSET", None))
+    if off is None:
+        off = 0 if str(comp).lower() == "picabook" else 1
     for k, q in enumerate(getattr(C, "QR_CODES", [])):
         d = re.search(r"(\d{4})-(\d{2})-(\d{2})", q["src"]).groups()
         when = datetime(int(d[0]), int(d[1]), int(d[2]), 23, 59, q.get("t", 30 + k % 30))  # "t": new second for a re-made file
         url = prepare(q["src"], q["file"], when, tuple(q.get("bg", TEAL)), tuple(q.get("dark", DARK)))  # "dark": darker dots on a dark page
-        print(f"{q['file']}  page {q['page'] + 1} (Lupa)  ->  {url}")
+        print(f"{q['file']}  page {q['page'] + off} ({comp})  ->  {url}")
 
 
 if __name__ == "__main__":

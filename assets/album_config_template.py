@@ -1,16 +1,29 @@
 """Per-album settings. Copy to the album folder as album_config.py and fill in as the work goes on.
 
-Photo numbers (#) are the numbers fetch_album.py gives (camera-time order). Plan page "no" = the editor's page
-number - 1 (Lupa counts its opening-words page as page 1). Every value below is an example: replace or empty it.
+Photo numbers (#) are the numbers fetch_album.py gives (camera-time order).
+For Picabook (default), plan page "no" == editor page number (EDITOR_OFFSET = 0, Panoramic 29 x 22 cm).
+For Lupa, editor page number = plan page "no" + 1 (Lupa counts its opening-words page as page 1, 30 x 22 cm).
+Every value below is an example: replace or empty it.
 """
 
-# ---- language and company -------------------------------------------------------------------------------
+# ---- language, company & book geometry ------------------------------------------------------------------
 LANG = "he"  # page titles, map labels, facts: "he" (Hebrew) or "en" (English). The book reads right to left.
-COMPANY = "Lupa"  # the album maker; Lupa gets the automated editor route, others get print files + guided upload
+COMPANY = "Picabook"  # "Picabook" (default: picabook.co.il Web 4.0) | "Lupa" (lupa.co.il) | other maker name
+PW = 29.0  # single page width in cm (Picabook Panoramic: 29.0; Lupa Panoramic Large: 30.0)
+PH = 22.0  # single page height in cm (22.0 for both Picabook Panoramic and Lupa Panoramic Large)
 BOOK_PAGES = None  # fixed page count; None = the natural length rounded up to BOOK_PAGE_STEP
-BOOK_MIN_PAGES = 24  # product minimum
-BOOK_MAX_PAGES = 100  # product maximum (Lupa Dutch book: 100)
-BOOK_PAGE_STEP = 4  # pages are added in steps of this
+BOOK_MIN_PAGES = 24  # product minimum (24 for Picabook & Lupa)
+BOOK_MAX_PAGES = 100  # product maximum (100 for Picabook Diamond "הדפסת יהלום" & Lupa Dutch lay-flat; 144 Classic)
+BOOK_PAGE_STEP = 4  # pages added per step in the editor (+4 pages = +2 spreads in Picabook Web 4.0 & Lupa)
+EDITOR_OFFSET = 0  # 0 for Picabook ("עמוד 1" == plan page 1); set None or 1 for Lupa when using opening-words page
+
+# ---- Picabook native typography & editor options ---------------------------------------------------------
+PICABOOK_FONT = "Heebo Unicode"  # native editor font ("Heebo Unicode", "Rubik Unicode", "Assistant Unicode", "Alef Unicode")
+PICABOOK_TITLE_PT = 24  # native page header font size in editor points
+PICABOOK_BODY_PT = 14  # native body text font size (opening words, intro story, TEXT_HALF, closing)
+PICABOOK_CAPTION_PT = 11  # native QR code label / photo caption font size
+PICABOOK_NATIVE_QR = True  # True = use Picabook's native vector QR tool + native Hebrew label below it
+PICABOOK_NATIVE_COVER_TEXT = True  # True = place cover title, subtitle & spine as editable native text boxes
 
 # ---- sections = places, in trip order -----------------------------------------------------------------------
 # (id, page title in LANG, English name, keywords matched in the reviewers' "place" text; the longest match wins)
@@ -24,7 +37,7 @@ FORCE_SECTION: dict[int, str] = {}  # photo # -> section id, when the keywords p
 
 # ---- opening & closing pages -----------------------------------------------------------------------------
 COVER = 0  # photo # for the cover (one family photo in big scenery)
-COVER_ONLY = True  # the cover photo is on the cover only; inside: opening words, map, departure
+COVER_ONLY = True  # the cover photo is on the cover only; inside: map, opening words, departure
 DEPARTURE: list[int] = []  # leaving-home photos (dog goodbye, airport, plane)
 OPENING_AFTER_DEPARTURE = True
 INTRO_PHOTOS: list[int] = []  # "home on wheels" / trip-base intro spread (the one planned exception to time order)
@@ -42,21 +55,23 @@ OPENING_TEXT_SHOW = True
 OPENING_BG = None  # faded photo behind the opening-words page (file in ready/upload)
 OPENING_BLANK = False
 CLOSING_TITLE_HE = ""  # last page header (e.g. "מילות סיום..." / "Closing words")
+CLOSING_TEXT_HE = ""  # optional body paragraph on the closing page (native editable text in Picabook)
 NO_CLOSING_PAGE = False  # True = skip closing page when videos/closing words are embedded across the album
 
-# ---- cover (make_cover_photo.py + make_cover_title.py) ------------------------------------------------------
+# ---- cover (make_cover_photo.py + native cover text or make_cover_title.py) ------------------------------
 COVER_TITLE_HE = "Our trip"  # first line of the cover title (any language)
 COVER_SUB_HE = "2026"  # second line, half size
+SPINE_TEXT_HE = ""  # spine text (defaults to "COVER_TITLE_HE · COVER_SUB_HE" when empty)
 COVER_SRC = ""  # full-size cover photo (or the user's RAW export)
-COVER_RATIO = 3900 / 2860  # the editor's cover photo shape (Lupa Panoramic Large)
+COVER_RATIO = 29.0 / 22.0  # front cover shape (Picabook Panoramic: 29/22; Lupa Panoramic Large: 3900/2860)
 COVER_LEFT = None  # px cut on the left (None = evenly from both sides); move so the sky lands under the title
 COVER_PEOPLE = (0.30, 0.52, 0.80, 1.02)  # where the people are (fractions): their shadows get lifted
 COVER_SKY = (1.55, 0.86, 1.25)  # sky saturation, deepen, cloud contrast (1, 1, 1 = untouched)
-COVER_TITLE_CX = 1450  # title centre on the cover sheet (px): on the sky, off faces and peaks
+COVER_TITLE_CX = 1450  # title centre on the cover sheet (px, for Lupa baked cover title)
 COVER_TITLE_FONT = 207
-COVER_IMAGE = "ready/upload/000_cover_title.jpg"  # shown on the plan
+COVER_IMAGE = "ready/upload/000_cover.jpg"  # shown on the plan (use 000_cover_title.jpg if baking title into image)
 BACK_COVER_IMAGE = None
-COVER_NOTE = "The cover photo fills the front cover; the title is drawn into the photo, on the sky."
+COVER_NOTE = "The cover photo fills the front cover; in Picabook the title and spine text stay editable native text boxes."
 
 # ---- photo choices (review rounds) -------------------------------------------------------------------------
 REPLACE: dict[int, int] = {}  # photo in the book -> replacement photo
@@ -66,6 +81,7 @@ FORCE_HERO: set[int] = set()  # full page
 NO_HERO: set[int] = set()
 SPREAD_FORCE: set[int] = set()  # double-page spread (drone shots, panoramas)
 NOTES: dict[int, str] = {}  # notes shown on a photo in the plan
+CAPTIONS: dict[int, str] = {}  # optional short printed caption per photo # (native editable text box in Picabook)
 SWAPS: list[tuple[int, int]] = []  # applied in order, after layout
 FILL_PICKS: list[int] = []
 BIGGER: list[tuple[int, int]] = []  # (a, b): a gets the bigger frame
@@ -100,7 +116,7 @@ BG_TEXTURE_SOFTEN = 0.0
 
 # ---- route map (make_map.py) -------------------------------------------------------------------------------
 # (number, label in LANG, dates, lat, lng, label side l/r/t/b/n) — coordinates from the photos' own locations
-US_STATES = True  # False for international trips outside the US (skips US state boundaries and coloring)
+US_STATES = False  # True for US road trips (colors visited states); False for international trips
 STOPS: list[tuple] = []
 ROUTE: list[tuple[float, float]] = []  # driving waypoints in trip order
 NUDGE: dict[int, tuple[int, int]] = {}
@@ -113,8 +129,9 @@ ROUTE_MILES_ACTUAL = None  # odometer / rental bill, when known
 STATE_LABEL_AT: dict[str, tuple[float, float]] = {}  # US trips: move a state's name
 
 # ---- QR codes (make_qr.py; rules in references/qr-rules.md) -------------------------------------------------
-# page = plan page no; x/y = top-left and s = size, in cm on that 30x22 page; bg = page colour under the code;
-# t = a unique EXIF second; title_he = label rendered next to the QR; url = direct link opened on click.
+# page = plan page no; x/y = top-left and s = size, in cm on that page (29x22 for Picabook, 30x22 for Lupa);
+# bg = page colour under the code; t = a unique EXIF second; title_he = label rendered under the QR;
+# url = direct link opened on click and encoded in Picabook's native QR element.
 # Top-margin placement (x=1.0, y=0.22, s=1.92) keeps clearance above photos starting at y >= 2.4 cm.
 QR_CODES: list[dict] = [
     # {"file": "ready/upload/qr_2026-05-02_rome.jpg", "src": "qr-codes/2026-05-02_rome.jpg", "bg": (255, 255, 255),
@@ -136,6 +153,6 @@ ALBUM_LINE = "Shared Google album · dates"
 OUTPUT_HTML = "album-plan.html"
 PRODUCT_HTML = ""  # recommended book + price table (HTML card); "__ROOM__" = number of photos that fit
 THEMES: list[tuple] = []  # (key, name, English name, tag, why, [sample images in themes/])
-THEME_NOTE = "Check in the album editor that the theme works with your chosen book and size before you start."
+THEME_NOTE = "Picabook's 'עיצוב חכם ללא תבנית' (clean white) gives a modern gallery look; check themes in the editor if you prefer decorative backgrounds."
 EMO: dict[str, str] = {}  # optional: one cartoon symbol per section (Noto emoji code point); off by default
 TRIP_FACTS: list[tuple[str, str]] = []  # (fact in LANG, source) from the family's trip documents

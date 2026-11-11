@@ -40,7 +40,7 @@ input[type=search], input[type=text] { font:inherit; padding:6px 10px; border-ra
 input[type=search] { width:150px; }
 .opening { margin:16px 0; }
 .pages { display:flex; flex-direction:row-reverse; justify-content:center; }
-.page { position:relative; width:50%; max-width:600px; aspect-ratio:30/22; background:var(--page); border:1px solid #d9d4c8; overflow:hidden; color:#1f2328; }
+.page { position:relative; width:50%; max-width:600px; aspect-ratio:var(--page-ar, 29/22); background:var(--page); border:1px solid #d9d4c8; overflow:hidden; color:#1f2328; }
 .page.r { border-left:2px solid rgba(0,0,0,.18); }
 .page.empty { background:repeating-linear-gradient(45deg,transparent 0 8px,rgba(0,0,0,.05) 8px 9px); display:grid; place-items:center; color:var(--muted); font-size:12px; }
 .ptitle { position:absolute; top:2.2%; right:3.4%; font-size:clamp(9px,1.2vw,14px); font-weight:700; text-align:right; white-space:nowrap; z-index:2; direction:rtl; display:flex; gap:8px; align-items:center; }

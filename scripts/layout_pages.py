@@ -1,34 +1,44 @@
 """Add crop-free frame positions (cm) to every page in plan.json.
 
-Dutch book (lay-flat): when both pages of an open spread show the same place, the two
-pages are laid out as one 60 x 22 cm canvas and photos may cross the middle.
+Lay-flat books (Picabook Diamond 29x22 -> 58x22 cm; Lupa Dutch 30x22 -> 60x22 cm):
+when both pages of an open spread show the same place, the two pages are laid out as
+one continuous spread canvas and photos may cross the center fold.
 """
 import json
 
 import layout
 from layout import GAP, best_layout
 
-PW, PH = 30.0, 22.0  # Lupa Panoramic Large page, cm
-BOX = (1.0, 2.4, 28.0, 18.6)  # photo area under the page title
-SPREAD_BOX = (1.0, 2.4, 58.0, 18.6)  # merged spread: left page 0–30 cm, right page 30–60 cm
-INTRO_BOX = (1.0, 2.4, 16.8, 18.6)  # right intro page: photos left, text box right
-INTRO_SPREAD_BOX = (1.0, 2.4, 46.6, 18.6)  # intro spread: photos across the fold, text box on the right page
+COMPANY = "Picabook"
+PW: float | None = None
+PH: float | None = None
+BOX: tuple | None = None
+SPREAD_BOX: tuple | None = None
+INTRO_BOX: tuple | None = None
+INTRO_SPREAD_BOX: tuple | None = None
+TEXT_BOX: tuple | None = None
 SWAPS: list[tuple[int, int]] = []  # photo pairs that trade places (from the review marks)
 SAME_SIZE: list[tuple[int, ...]] = []  # photos shown side by side at the same height
 LOW_FILL = 0.86
 INTRO_TEXT_BOX = True  # False: the motorhome intro spread has no text box (its text lives on the opening-words page)
 SPREAD_3_PLACES = False  # True: spreads with 3 places are laid out as one canvas with 3 areas
 TEXT_HALF: dict[str, dict] = {}
-TEXT_BOX = (1.0, 2.4, 13.6, 18.6)  # text half of a left page (spread coords); photos use the rest of the spread
 BIGGER: list[tuple[int, int]] = []  # (a, b): photo a gets a bigger frame than b (layout is recomputed, not refitted)
 FILL_PICKS: list[int] = []
-LOCK_FILE = ""  # when the book is locked, the fill-up may only re-add FILL_PICKS  # photos the fill-up step added in a version the user already reviewed: keep them when they still fit
+LOCK_FILE = ""  # when the book is locked, the fill-up may only re-add FILL_PICKS
 import os, sys  # noqa: E401
 sys.path.insert(0, os.getcwd())
 try:
     from album_config import *  # noqa: F401,F403  (per-album settings; run from the album folder)
 except ImportError:
     pass
+PW = float(PW) if PW is not None else (29.0 if str(COMPANY).lower() == "picabook" else 30.0)
+PH = float(PH) if PH is not None else 22.0
+BOX = BOX or (1.0, 2.4, round(PW - 2.0, 2), round(PH - 3.4, 2))
+SPREAD_BOX = SPREAD_BOX or (1.0, 2.4, round(2 * PW - 2.0, 2), round(PH - 3.4, 2))
+INTRO_BOX = INTRO_BOX or (1.0, 2.4, round(PW - 13.2, 2), round(PH - 3.4, 2))
+INTRO_SPREAD_BOX = INTRO_SPREAD_BOX or (1.0, 2.4, round(2 * PW - 13.4, 2), round(PH - 3.4, 2))
+TEXT_BOX = TEXT_BOX or (1.0, 2.4, round(PW - 16.4, 2), round(PH - 3.4, 2))
 layout.BIGGER = list(BIGGER)
 
 
@@ -142,7 +152,7 @@ def main() -> None:
             ib = INTRO_SPREAD_BOX if INTRO_TEXT_BOX else SPREAD_BOX
             lay = lay_pairs([(n, asp[n]) for n in reversed(ns)], ib[2], ib[3], ib[0], ib[1])
             for pg, shift in ((right, PW), (left, 0.0)):
-                pg["rects"], pg["fill"], pg["merged"], pg["shift"], pg["titles"] = lay["rects"], lay["fill"], True, shift, [{"sec": right["sec"], "right": 59.0}]
+                pg["rects"], pg["fill"], pg["merged"], pg["shift"], pg["titles"] = lay["rects"], lay["fill"], True, shift, [{"sec": right["sec"], "right": round(2 * PW - 1.0, 2)}]
             continue
         if right["kind"] == left["kind"] == "spread" and len(right["photos"]) > 1:  # spread photo + extras on one canvas
             ns = right["photos"]

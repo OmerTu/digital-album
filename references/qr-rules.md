@@ -23,11 +23,12 @@ python3 scripts/make_qr.py
 - **Layering (critical print rule):**
   - The QR is always the **top layer** of its page, above photos and frame lines.
   - **Never straddle a photo's edge**: it must sit either completely on the page background (with ≥ 0.3 cm margin) or completely inside a photo (with ≥ 0.3 cm margin from the frame).
-  - No frame border around the QR: in Lupa `m_folder_frame = {m_width_px: 8, m_frame_opacity: 0}`.
+  - No frame border around the QR: in Picabook use the native `QR Code` (`הוסף קוד קישור`) element (`PICABOOK_NATIVE_QR = True`, crisp vector output, zero border) or a borderless image frame (`border_px = 0`); in Lupa `m_folder_frame = {m_width_px: 8, m_frame_opacity: 0}`.
 - **Background Color:**
   - `QR_DEFAULT_BG = (255, 255, 255)` (pure white). Tints the code's quiet zone to match the page background.
 - **Labels (`title_he`)**:
   - In `album-plan.html`, QR codes are rendered inside a `.qr-wrap` container featuring a Hebrew title label below the code and click-to-preview functionality.
+  - In **Picabook**, `picabook_layout.py` also places a crisp native `Heebo Unicode` caption (`role="qr_caption"`) right below the QR code in the printed book whenever margin clearance allows, and automatically shifts any nearby page header horizontally so they never collide.
 
 ## 4. Configuration Schema (`album_config.py`)
 Each entry in `QR_CODES`:

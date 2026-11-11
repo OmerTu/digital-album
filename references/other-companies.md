@@ -1,7 +1,7 @@
 # Any other album maker: research, then print files and a guided upload
 
-For makers other than Lupa, Claude does the research, the plan and print-ready files, then guides the upload step
-by step while watching the screen. It does not rewrite the maker's editor data (that is only built for Lupa).
+For makers other than Picabook (`references/picabook.md`) and Lupa (`references/lupa.md`), the agent does the research, the plan and print-ready files, then guides the upload step
+by step while watching the screen. It does not drive the maker's editor directly (first-class editor automation is built for Picabook and Lupa).
 
 ## 1. Research checklist (live, with sources)
 Use web search and the browser. Decline non-essential cookies; never sign up, log in or add to cart.

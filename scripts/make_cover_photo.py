@@ -7,11 +7,14 @@ sky gap lands under the title), COVER_PEOPLE (x0, y0, x1, y1 fractions of the pe
 deepen, cloud contrast), COVER_PHOTO_STAMP. Writes ready/upload/000_cover.jpg; make_cover_title.py adds the title.
 Usage (album folder):  python3 make_cover_photo.py
 """
+import os
+import sys
 from datetime import datetime
 
 import numpy as np
 from PIL import Image, ImageFilter
 
+sys.path.insert(0, os.getcwd())
 import make_upload_set as U
 from prepare_originals import lift_shadows
 
@@ -19,7 +22,8 @@ import album_config as C
 
 SRC = C.COVER_SRC
 OUT = getattr(C, "COVER_PHOTO_FILE", "ready/upload/000_cover.jpg")
-RATIO = getattr(C, "COVER_RATIO", 3900 / 2860)
+_comp = str(getattr(C, "COMPANY", "Picabook")).lower()
+RATIO = getattr(C, "COVER_RATIO", (29.0 / 22.0) if _comp == "picabook" else (3900 / 2860))
 LEFT = getattr(C, "COVER_LEFT", None)  # None = cut evenly from both sides
 FAMILY = getattr(C, "COVER_PEOPLE", (0.30, 0.52, 0.80, 1.02))  # soft region for the shadow lift
 SKY_SAT, SKY_DEEPEN, CLOUD_CONTRAST = getattr(C, "COVER_SKY", (1.55, 0.86, 1.25))

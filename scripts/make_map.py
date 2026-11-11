@@ -16,7 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageDraw, ImageFilter
 
 UA = "Mozilla/5.0 (family photo album route map)"
-W_OUT, H_OUT = 3543, 2598  # 30 x 22 cm at 300 dpi
+COMPANY = "Picabook"
+PW: float | None = None
+PH: float | None = None
+W_OUT, H_OUT = 3425, 2598  # 29 x 22 cm at 300 dpi (recomputed from PW/PH below)
 Z = 8  # tile zoom (256 px Esri terrain tiles)
 TILE = 256
 
@@ -54,6 +57,9 @@ try:
     from album_config import *  # noqa: F401,F403  (per-album settings; run from the album folder)
 except ImportError:
     pass
+_pw = float(PW) if PW is not None else (29.0 if str(COMPANY).lower() == "picabook" else 30.0)
+_ph = float(PH) if PH is not None else 22.0
+W_OUT, H_OUT = round(_pw * 300 / 2.54), round(_ph * 300 / 2.54)
 
 
 def world_px(lat: float, lng: float) -> tuple[float, float]:
@@ -291,7 +297,8 @@ def main() -> None:
         .replace("__LINE__", map_line(len(visited))).replace("__LANG__", LANG).replace("__DIR__", "rtl" if LANG == "he" else "ltr") \
         .replace("__MILES__", f"{round(km / 1.609344, -2 if ROUTE_MILES_ACTUAL else 0):,.0f}").replace("__KM__", f"{round(km, -2 if ROUTE_MILES_ACTUAL else 0):,.0f}") \
         .replace("__GX__", str(round(gx))).replace("__GY__", str(round(gy))) \
-        .replace("__TITLE__", MAP_TITLE or ("המסלול שלנו" if LANG == "he" else "Our route")).replace("__SUB__", MAP_SUBTITLE).replace("__SIDE__", SIDE_TRIP_LABEL)
+        .replace("__TITLE__", MAP_TITLE or ("המסלול שלנו" if LANG == "he" else "Our route")).replace("__SUB__", MAP_SUBTITLE).replace("__SIDE__", SIDE_TRIP_LABEL) \
+        .replace("3543px", f"{W_OUT}px").replace("2598px", f"{H_OUT}px")
     open("map/overlay.html", "w").write(html)
     from chrome import CHROME as chrome, T
     here = os.path.abspath("map/overlay.html")

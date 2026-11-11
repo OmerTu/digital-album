@@ -21,7 +21,9 @@ import album_config as C  # noqa: E402
 
 DPI = 300
 CM = DPI / 2.54
-PW, PH = 30.0, 22.0
+_comp = str(getattr(C, "COMPANY", "Picabook")).lower()
+PW = float(getattr(C, "PW", None) or (29.0 if _comp == "picabook" else 30.0))
+PH = float(getattr(C, "PH", None) or 22.0)
 from chrome import CHROME
 HERE = os.getcwd()
 
@@ -135,15 +137,15 @@ def build_opening(i: int, right: dict | None, left: dict | None) -> tuple[str, s
         if right["kind"] == "intro":
             fg += title_div(C.INTRO_TITLE_HE, 2 * PW - 1.0, symbol_once(right["sec"]))
             if getattr(C, "INTRO_TEXT_BOX", True):
-                fg += (f"<div class='intro' style='left:{px(48.8)};top:{px(2.4)};width:{px(10.2)};height:{px(18.6)}'>"
+                fg += (f"<div class='intro' style='left:{px(2 * PW - 11.2)};top:{px(2.4)};width:{px(10.2)};height:{px(18.6)}'>"
                        f"<b>{escape(C.INTRO_TITLE_HE)}</b>{escape(C.INTRO_TEXT_HE)}</div>")
         else:
             th = getattr(C, "TEXT_HALF", {}).get(left["sec"]) if left.get("textbox") else None
             if th:
-                fg += (f"<div class='intro' style='left:{px(1.0)};top:{px(2.4)};width:{px(13.6)};height:{px(18.6)}'>"
+                fg += (f"<div class='intro' style='left:{px(1.0)};top:{px(2.4)};width:{px(PW - 16.4)};height:{px(18.6)}'>"
                        f"<b>{escape(th['title'])}</b>{escape(th['text'])}</div>")
             for t in right["titles"]:
-                rr = min(t["right"], 29.3) if t["right"] <= 36 else t["right"]  # a title near the fold goes on the left page
+                rr = min(t["right"], PW - 0.7) if t["right"] <= PW + 6 else t["right"]  # a title near the fold goes on the left page
                 fg += title_div(" · ".join(SEC[s]["he"] for s in t.get("secs", [t["sec"]]))[:45], rr, symbol_once(t["sec"]))
     for pg in (right, left):
         if pg is not None and pg["kind"] == "spread" and pg.get("half") == "right":

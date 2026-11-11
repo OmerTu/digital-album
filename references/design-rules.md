@@ -3,9 +3,9 @@
 These rules came from many review rounds on real albums that printed perfectly. Follow them unless the user asks for something else, and tell the user when a request breaks one.
 
 ## Book
-- Read right to left (Hebrew books). An open spread = the right page first. Page titles may be Hebrew or English.
-- Page numbers: use the album editor's numbers when talking to the user (Lupa counts its opening-words page as page 1, so editor page = plan page + 1).
-- Lay-flat books (Lupa "Dutch book") open 180° flat: one place across both pages = one 60×22 cm canvas, and photos may cross the fold.
+- Read right to left (Hebrew books, `פתיחה עברית`). An open spread = the right page first. Page titles may be Hebrew or English.
+- Page numbers: use the album editor's numbers when talking to the user (`EDITOR_OFFSET = 0` in Picabook where `עמוד 1` == plan page 1; `EDITOR_OFFSET = 1` in Lupa because Lupa counts its opening-words page as page 1, so editor page = plan page + 1).
+- Lay-flat books (Picabook "הדפסת יהלום" `29×22 cm` → `58×22 cm` canvas; Lupa "הולנדי" `30×22 cm` → `60×22 cm` canvas) open 180° flat with zero gutter loss, and photos may cross the fold.
 - Clean white page background (`PAGE_BG_WHITE = True`): gives a crisp, modern look. Blurred photo backgrounds can still be enabled if requested (`PAGE_BG_WHITE = False`).
 
 ## Order
@@ -22,8 +22,9 @@ These rules came from many review rounds on real albums that printed perfectly. 
 - A page can be left partly empty on purpose for handwriting or clean negative space.
 
 ## Text
-- Page title ≤ 45 characters, photo caption ≤ 21 (Lupa limits; check other makers).
-- **No box or background behind any text.** Text colour stands out from the page: dark text on light background, white on dark.
+- **Picabook (`COMPANY = "Picabook"`)**: Native editable freeform text boxes (`Heebo Unicode` by default) with no character limit — supports multi-line opening/intro/closing stories, page headers, photo captions (`CAPTIONS`), cover titles, and rotated spine text directly in the editor.
+- **Lupa (`COMPANY = "Lupa"`)**: Native page title ≤ 45 characters, photo caption ≤ 21 (longer titles/stories are rendered as >800 px JPEGs via `lupa_titles.py`).
+- **No box or background behind any text.** Text colour stands out from the page: dark text (`#1F2328`) on light background, white (`#FFFFFF` + subtle drop shadow) on dark.
 - **Never repeat a page header.** A header appears on the first page of its place only. Header title can be right-aligned on specific pages via `TITLE_RIGHT_ALIGN`.
 - No icons, symbols or flags in headers.
 - Distances: kilometres first, miles in brackets (e.g. "9,100 km (5,666 mi)").

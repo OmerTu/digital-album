@@ -1,6 +1,6 @@
 # 📸 Digital Album Skill for Google Antigravity
 
-An end-to-end skill for **Google Antigravity** that turns a shared Google Photos album of a trip or event into a professionally printed photo book (Lupa, Crello, Shutterfly, and more).
+An end-to-end skill for **Google Antigravity** that turns a shared Google Photos album of a trip or event into a professionally printed photo book (**Picabook / picabook.co.il** default, **Lupa**, Shutterfly, and more).
 
 ---
 
@@ -15,7 +15,9 @@ An end-to-end skill for **Google Antigravity** that turns a shared Google Photos
   - **Client-Side Review & Markups**: Mark replacement candidates, star favorites, and export feedback with "העתק סימונים" (Copy marks) to paste back to Antigravity.
 - **Itinerary Maps**: Generates route maps with OpenStreetMap support for international trips.
 - **Print Pre-Flight Check**: Checks bleed margins, low-resolution warnings, QR readability, and face occlusions.
-- **Lupa & Bookmaker Automation**: Prepares crop-ready assets, spreads, and automated driver scripts.
+- **Picabook (`picabook.co.il`) & Lupa Automation**:
+  - **Picabook Web 4.0 (Default)**: Native editable `Heebo Unicode` Hebrew/English text boxes (headers, stories, captions, cover & rotated spine text with zero background boxes), exact centimeter (`0.01 cm`) photo frame locations & sizes (`29×22 cm` Panoramic Diamond Lay-flat / `58×22 cm` spreads), and native vector QR codes + Hebrew captions (`picabook_layout.py` + `picabook_apply.js`).
+  - **Lupa**: Full crop-ready assets, >800 px title tiles, and automated WebSocket/DOM driver scripts (`lupa_layout.py`, `lupa_titles.py`, `lupa_apply.js`).
 
 ---
 

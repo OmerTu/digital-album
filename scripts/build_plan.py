@@ -1,4 +1,4 @@
-"""Build the Lupa album plan (data + layout) for one trip album.
+"""Build the album plan (data + layout) for one trip album (Picabook, Lupa, or any maker).
 
 Reads items.json (photo metadata) and notes/part*.json (per-photo review),
 writes plan.json with sections, pages and per-photo decisions.
@@ -185,7 +185,7 @@ def build() -> dict[str, Any]:
             pages: list[dict[str, Any]] = [
                 {"kind": "map", "photos": [], "sec": FIRST_SEC, "note": "Route map (map/route_map.png)"},
                 ({"kind": "feature", "photos": [OPENING_PHOTO], "sec": FIRST_SEC, "note": "One big photo, room for text around it"}
-                 if OPENING_PHOTO else {"kind": "opening", "photos": [], "sec": FIRST_SEC, "note": "Opening words (Lupa text page – editable)"}),
+                 if OPENING_PHOTO else {"kind": "opening", "photos": [], "sec": FIRST_SEC, "note": "Opening words (editable text page)"}),
                 {"kind": "photos", "photos": DEPARTURE, "sec": FIRST_SEC, "note": "Goodbye to the dog, airport, plane"}]
             if OPENING_AFTER_DEPARTURE:  # leaving home first, then the big motorhome photo
                 pages[1], pages[2] = pages[2], pages[1]

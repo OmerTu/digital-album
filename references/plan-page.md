@@ -59,4 +59,4 @@
 5. When the user approves the book, set `LOCK_FILE` so later rounds change only what they ask.
 
 ## Chat requests (no marks needed)
-The user may simply say "page 42: swap 165 and 172", "straighten 328", "make 498 a full page like 496", "clean white background", "move the title to page 75", "enhance 433". Translate editor page numbers to plan page numbers (plan = editor − 1 for Lupa), update `album_config.py`, rebuild, and verify on the plan.
+The user may simply say "page 42: swap 165 and 172", "straighten 328", "make 498 a full page like 496", "clean white background", "move the title to page 75", "enhance 433". Translate editor page numbers to plan page numbers (`plan == editor` for Picabook where `EDITOR_OFFSET = 0`; `plan = editor − 1` for Lupa where `EDITOR_OFFSET = 1`), update `album_config.py`, rebuild, and verify on the plan.
