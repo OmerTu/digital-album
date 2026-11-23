@@ -123,6 +123,17 @@ def check_picabook(layout_path: str = "ready/picabook_layout.json") -> int:
                     ox, oy = overlap(tb, box_cm(p))
                     if ox > 0.08 and oy > 0.08:
                         err.append(f"{tag}: page header '{txt}' overlaps photo #{p['n']}")
+            if t_role == "qr_caption":
+                tb = box_cm(t)
+                for p in non_bleed_photos:
+                    ox, oy = overlap(tb, box_cm(p))
+                    if ox > 0.08 and oy > 0.08:
+                        err.append(f"{tag}: QR caption '{txt}' overlaps photo #{p['n']}")
+                for other in texts:
+                    if other is not t and other.get("role") == "page_title":
+                        ox, oy = overlap(tb, box_cm(other))
+                        if ox > 0.05 and oy > 0.05:
+                            err.append(f"{tag}: QR caption '{txt}' collides with page header '{other.get('text')}'")
             if t_role != "spine_title":
                 tb = box_cm(t)
                 if tb[0] < 0.15 or tb[1] < 0.10 or tb[2] > W - 0.15 or tb[3] > H - 0.15:

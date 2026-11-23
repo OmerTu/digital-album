@@ -26,11 +26,18 @@ python3 scripts/make_qr.py
   - No frame border around the QR: in Picabook use the native `QR Code` (`הוסף קוד קישור`) element (`PICABOOK_NATIVE_QR = True`, crisp vector output, zero border) or a borderless image frame (`border_px = 0`); in Lupa `m_folder_frame = {m_width_px: 8, m_frame_opacity: 0}`.
 - **Background Color:**
   - `QR_DEFAULT_BG = (255, 255, 255)` (pure white). Tints the code's quiet zone to match the page background.
-- **Labels (`title_he`)**:
-  - In `album-plan.html`, QR codes are rendered inside a `.qr-wrap` container featuring a Hebrew title label below the code and click-to-preview functionality.
-  - In **Picabook**, `picabook_layout.py` also places a crisp native `Heebo Unicode` caption (`role="qr_caption"`) right below the QR code in the printed book whenever margin clearance allows, and automatically shifts any nearby page header horizontally so they never collide.
+- **Labels (`VIDEO_TITLES` / `title_he`)**:
+  - Set titles per video in `VIDEO_TITLES = {video_n: "short title"}` in `album_config.py` (overrides/fills `QR_CODES[...]["title_he"]`, and can also be set interactively from each video card, video modal, or QR modal in `album-plan.html`).
+  - In `album-plan.html`, QR codes render inside a `.qr-wrap` container with the `.qr-label` placed **next to** the QR code (to its right on left-margin QRs, to its left on right-side QRs) and click-to-preview + inline title editing.
+  - In **Picabook**, `picabook_layout.py` places a crisp native `Heebo Unicode` caption (`role="qr_caption"`) **next to** the QR code (horizontally adjacent, vertically centered in the top margin; falling back below if side margin is tight) and automatically shifts any nearby page header so they never collide.
 
 ## 4. Configuration Schema (`album_config.py`)
+Per-video titles (applied automatically to matching `video_n` QR codes and pre-populated in the planner's Video Gallery):
+```python
+VIDEO_TITLES = {
+    14: "נשנוש ענבים בשדה",
+}
+```
 Each entry in `QR_CODES`:
 ```python
 {
@@ -41,7 +48,7 @@ Each entry in `QR_CODES`:
     "page": 4,               # plan page number
     "x": 1.0, "y": 0.22,     # cm from top-left of page
     "s": 1.92,               # size in cm
-    "title_he": "נשנוש ענבים בשדה",  # Hebrew label shown in plan and hover
+    "title_he": "נשנוש ענבים בשדה",  # label shown next to QR (optional if set in VIDEO_TITLES)
     "video_n": 14,           # optional: video number in items.json
     "url": "https://...",    # direct URL for opening in browser
     "note": "נשנוש ענבים בשדה (סרטון #14)"

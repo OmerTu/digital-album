@@ -11,26 +11,27 @@
 - **Review instruction banner** (bilingual Hebrew/English): explains controls, mark types, and shortcuts.
 - **Every page** in book order, as open spreads (right page first), drawn to scale:
   - Clean white page backgrounds (`PAGE_BG_WHITE = True`) by default.
-  - Photos with their numbers, aspect ratio framing, and action buttons.
-  - Page titles, QR codes with Hebrew labels (`title_he`), text pages. Editor page numbers under each page.
+  - Photos render in their enhanced **After tuning** view by default (`<body class="after">`, merging `EXTRA_TUNE` overrides); click **Show: After tuning** in the toolbar to toggle back to **Before**.
+  - Photos show their number badge, aspect-ratio framing, and hover-only action buttons (`✕`, `?`, `🔍` fade in only when hovering over the photo).
+  - Page titles, QR codes with titles next to them (`VIDEO_TITLES` / `title_he`), text pages. Editor page numbers under each page.
 - **Photo index of all candidates**:
-  - Full-opacity thumbnails for unkept photos (not dimmed, making them easy to review).
-  - Star (★) button on unkept candidates to bookmark them for addition.
-  - Zoom (🔍) button to open the fullscreen lightbox.
+  - Full-opacity thumbnails for unkept photos (not dimmed, making them easy to review), displayed in **After tuning** view by default.
+  - Hover-only overlay buttons on each photo (`★` Star on unkept candidates, `🔍` Zoom for fullscreen high-res lightbox).
 - **Video Gallery (`#videos`) at the bottom**:
   - Displays all videos captured during the trip, clearly distinguishing between those **part of the album** (linked via QR code with page number and title) and those **outside the album**.
-  - Direct option to watch and open each video (in Google Photos or via the `#videolb` video modal).
-  - Marking videos with **Favorite (Star ★)** or **Question Mark (?)** for reviews.
-  - Toolbar filters: All videos, In album (with QR), Outside album, Starred, Questions, and real-time search.
+  - Inline **Title next to QR** input on every video card (and inside `#videolb`) so the user can name any video; edits preview immediately next to matching QR codes on album pages and export via **Copy my marks**.
+  - Hover-only overlay buttons on video thumbnails (`★`, `?`, `▶`), plus direct watch links (`▶ צפה בסרטון ↗`) and `#videolb` modal.
+  - Toolbar filters: All videos, In album (with QR), Outside album, Starred, Questions, My marks (includes videos with edited titles), and real-time search.
 
 ## Interactive Tools and Marks (plan.js)
 - **Enlarged QR Code Modal (`.qrbig`)**:
-  - Clicking any QR code on album pages opens an enlarged, clear view.
+  - Clicking any QR code (or its label) on album pages opens an enlarged, clear view.
+  - Includes an inline **Title next to QR** input to set or tweak the label live on the page (synced with the Video Gallery card when linked to `video_n`).
   - Features a prominent **"פתח קישור ישיר בדפדפן ↗"** button that directly opens the destination link (Google Photos video/album or trip plan document) in a new browser tab.
 - **Video Gallery & Video Modal (`#videolb`)**:
   - Direct watch button (`▶ צפה בסרטון ↗`) on every video card.
-  - Clicking a video card opens `#videolb` with the video preview, place, description, duration, and album status.
-  - Allows marking any video with **Star (★ Favorite)** or **Question Mark (?)**.
+  - Clicking a video card opens `#videolb` with the video preview, place, description, duration, album status, and editable **Title next to QR** field.
+  - Allows marking any video with **Star (★ Favorite)** or **Question Mark (?)** without losing its custom title.
 - **Fullscreen High-Res Photo Lightbox (`#photolb`)**:
   - Click the **🔍** button on any photo tile or in the candidate index.
   - Instantly shows the local thumbnail, while asynchronously fetching the high-resolution (`=w2048-h1600`) image directly from Google Photos CDN with an animated spinner.
@@ -48,12 +49,12 @@
   - Filter photos by **★ Starred** or **? Questions** to quickly review flagged items.
   - Filter videos by in-album, outside album, starred, or questions.
 - **Saving & Exporting**:
-  - Marks are persisted in `localStorage` (`STORE_KEY`).
-  - **Copy my marks** generates a structured, easy-to-paste summary in chat containing replacements, removals, kept photos, question notes, starred candidates, and video marks (favorites & questions).
+  - Marks and custom video/QR titles are persisted in `localStorage` (`STORE_KEY`).
+  - **Copy my marks** generates a structured, easy-to-paste summary in chat containing replacements, removals, kept photos, question notes, starred candidates, video marks (favorites & questions), and custom video/QR titles.
 
 ## Applying a round
 1. Ask for the pasted "Copy my marks" text (in Cowork; or on Mac read with `read_chrome_marks.py <STORE_KEY>`).
-2. Put them in `album_config.py`: `REPLACE`, `FORCE_OUT`, `FORCE_KEEP`, `FORCE_HERO`, `SWAPS`, `NOTES`, `PAGE_CHUNKS`. Bump `STORE_KEY`.
+2. Put them in `album_config.py`: `REPLACE`, `FORCE_OUT`, `FORCE_KEEP`, `FORCE_HERO`, `SWAPS`, `NOTES`, `PAGE_CHUNKS`, `VIDEO_TITLES` (and/or `QR_CODES[...]["title_he"]`). Bump `STORE_KEY`.
 3. A swap marked again means "put them back": remove the old swap, don't add a new one.
 4. Rebuild (`build_plan.py → layout_pages.py → make_html.py`), then check that each mark really happened before confirming. Back up `plan.json` and `album_config.py` first.
 5. When the user approves the book, set `LOCK_FILE` so later rounds change only what they ask.

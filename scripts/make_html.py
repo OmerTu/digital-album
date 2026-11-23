@@ -41,6 +41,8 @@ OPENING_TITLE_HE = OPENING_TEXT_HE = OPENING_SIGN_HE = ""
 INTRO_TEXT_BOX = True
 TEXT_HALF: dict = {}
 QR_CODES: list = []
+VIDEO_TITLES: dict[int, str] = {}
+EXTRA_TUNE: dict[int, dict] = {}
 THEMES: list = []
 THEME_NOTE = ""
 EDITOR_OFFSET = None
@@ -120,6 +122,33 @@ for _idx, _q in enumerate(QR_CODES):
         _q["url"] = _u
 
 
+VIDEO_TITLES_NORM: dict[int, str] = {
+    int(k): str(v).strip()
+    for k, v in (globals().get("VIDEO_TITLES") or {}).items()
+    if str(k).lstrip("-").isdigit()
+}
+_EXTRA_TUNE_MAP: dict[int, dict] = globals().get("EXTRA_TUNE") or {}
+
+
+def effective_tune(p: dict[str, Any]) -> dict[str, Any]:
+    """Merge per-photo EXTRA_TUNE overrides (bright/contrast/sat) so the HTML After view matches print files."""
+    ex = _EXTRA_TUNE_MAP.get(p["n"], {})
+    return {**p["tune"], **{k: v for k, v in ex.items() if k in ("bright", "contrast", "sat")}}
+
+
+def resolve_qr_title(q: dict[str, Any]) -> str:
+    """Resolve the title shown next to a QR code: VIDEO_TITLES[video_n] overrides/fills QR title_he."""
+    vn = q.get("video_n")
+    if vn is not None:
+        try:
+            vn_int = int(vn)
+            if vn_int in VIDEO_TITLES_NORM:
+                return VIDEO_TITLES_NORM[vn_int]
+        except (TypeError, ValueError):
+            pass
+    return str(q.get("title_he") or q.get("title") or "").strip()
+
+
 SEC = {s[0]: {"he": s[1], "en": s[2]} for s in SECTIONS}
 big = {pg["photos"][0] for pg in PAGES if pg["kind"] in ("hero", "spread", "feature")}
 frames = {}
@@ -133,24 +162,24 @@ for i, pg in enumerate(PAGES):
     for n in group:
         mates.setdefault(n, [])
         mates[n] += [m for m in group if m != n and m not in mates[n]]
-data = {
-    str(p["n"]): {
+data = {}
+for p in photos:
+    _t = effective_tune(p)
+    data[str(p["n"])] = {
         "n": p["n"], "o": p["album_order"], "k": p["keep"], "sc": bool(p.get("space_cut")),
         "pl": p["place"], "s": p["scene"], "q": p["quality"], "pg": ("cover" if p["page"] == 0 else p["page"] + OFF if p["page"] else p["page"]), "sec": p["sec"],
-        "r": p["out_reason"], "t": p["tune"], "tt": tune_txt(p["tune"]), "d": local_date(p["n"]),
+        "r": p["out_reason"], "t": _t, "tt": tune_txt(_t), "d": local_date(p["n"]),
         "fx": p["fix"], "note": p.get("note", ""), "fr": frames.get(p["n"], ""),
         "h": p["n"] in big, "ar": round(p["w"] / p["h"], 3), "mt": mates.get(p["n"], []),
         "u": p.get("url", ""), "su": p.get("share_url", ""),
     }
-    for p in photos
-}
 
 # Video Gallery collection
 qr_by_video_n: dict[int, dict] = {}
 for _q in QR_CODES:
     _vn = _q.get("video_n")
-    if _vn:
-        qr_by_video_n[_vn] = _q
+    if _vn is not None:
+        qr_by_video_n[int(_vn)] = _q
 
 raw_items_url_map: dict[str, str] = {}
 if os.path.exists("raw_items.json"):
@@ -173,7 +202,9 @@ for p in photos:
     _qr_match = qr_by_video_n.get(p["n"])
     _in_album = bool(_qr_match or p.get("keep"))
     _qr_page = (_qr_match.get("page") + OFF) if (_qr_match and _qr_match.get("page")) else (p.get("page") if p.get("page") else None)
-    _qr_title = _qr_match.get("title_he", "") if _qr_match else ""
+    _qr_title = VIDEO_TITLES_NORM.get(p["n"])
+    if _qr_title is None:
+        _qr_title = resolve_qr_title(_qr_match) if _qr_match else ""
     _qr_url = _qr_match.get("url", "") if _qr_match else ""
     _share_url = p.get("share_url") or raw_items_url_map.get(p.get("id")) or _qr_url or p.get("url", "")
 
@@ -415,10 +446,16 @@ def page_html(pg: dict[str, Any] | None, side: str, bg: int | None = None) -> st
                      f"<b>{escape(th['title'])}</b>{escape(th['text'])}</div>")
     for idx, q in enumerate(QR_CODES):  # QR code overlays (scan to open the linked video / album)
         if q["page"] == no:
-            lbl = f"<span class='qr-label he'>{escape(q['title_he'])}</span>" if q.get("title_he") else ""
+            q_title = resolve_qr_title(q)
+            vn = q.get("video_n")
+            vn_attr = f" data-video-n='{vn}'" if vn is not None else ""
+            side_cls = " qr-left" if (float(q["x"]) + float(q["s"]) / 2 > PW * 0.55) else ""
+            lbl = f"<span class='qr-label he' dir='auto'>{escape(q_title)}</span>" if q_title else ""
             qr_url = escape(QR_URL_MAP.get(idx) or q.get("url", ""))
-            body += (f"<div class='qr-wrap' data-url='{qr_url}' style='left:{pct(q['x'], PW)};top:{pct(q['y'], PH_CM)};width:{pct(q['s'], PW)}'>"
-                     f"<img class='qr' title='QR · {escape(q.get('note', ''))}' data-url='{qr_url}' src='data:image/jpeg;base64,{img_b64(q['file'], 900, 95)}'>"
+            q_note = q.get("note") or q_title
+            body += (f"<div class='qr-wrap{side_cls}' data-qr-idx='{idx}'{vn_attr} data-init-title='{escape(q_title)}' data-url='{qr_url}' "
+                     f"style='left:{pct(q['x'], PW)};top:{pct(q['y'], PH_CM)};width:{pct(q['s'], PW)}'>"
+                     f"<img class='qr' title='QR · {escape(q_note)}' data-url='{qr_url}' src='data:image/jpeg;base64,{img_b64(q['file'], 900, 95)}'>"
                      f"{lbl}</div>")
     if bg and not white_bg and kind not in ("hero", "title", "spread"):
         body = wide_blur + body
@@ -533,7 +570,7 @@ facts_html = (f"<div class='card facts' dir='{'rtl' if LANG == 'he' else 'ltr'}'
 
 if LANG == "he":
     vid_h2 = f"גלריית סרטונים — כל {len(video_list)} הסרטונים מהטיול"
-    vid_sub = "כל הסרטונים שצולמו בטיול: אלו ששולבו באלבום (עם קוד QR) ואלו שמחוץ לאלבום. לחצו על סרטון לצפייה, סמנו בכוכב (★ מועדף להוספה לאלבום) או בסימן שאלה (? להערה/שאלה)."
+    vid_sub = "כל הסרטונים שצולמו בטיול: אלו ששולבו באלבום (עם קוד QR) ואלו שמחוץ לאלבום. לחצו על סרטון לצפייה, הגדירו כותרת קצרה שתופיע ליד קוד ה-QR, או סמנו בכוכב (★) / בסימן שאלה (?)."
     vf_all = f"כל הסרטונים ({len(video_list)})"
     vf_in = f"באלבום (קוד QR) ({len(in_album_vids)})"
     vf_out = f"מחוץ לאלבום ({len(out_album_vids)})"
@@ -544,7 +581,7 @@ if LANG == "he":
     jump_vids = "גלריית סרטונים 🎬 ↓"
 else:
     vid_h2 = f"Videos Gallery — All {len(video_list)} trip videos"
-    vid_sub = "All videos taken on the trip: those featured in the album with QR codes and those outside the album. Click to watch, star (★ favorite) or mark with a question mark (?)."
+    vid_sub = "All videos taken on the trip: those featured in the album with QR codes and those outside the album. Click to watch, set a short title to print next to the QR code, or mark with ★ / ?."
     vf_all = f"All videos ({len(video_list)})"
     vf_in = f"In album (QR) ({len(in_album_vids)})"
     vf_out = f"Outside album ({len(out_album_vids)})"
@@ -590,6 +627,10 @@ videolb_html = f"""
       <div class="videolb-scene" id="videolb-scene"></div>
       <div class="videolb-details" id="videolb-details"></div>
     </div>
+    <div class="videolb-title-edit">
+      <label for="videolb-qr-title">{'כותרת שתופיע ליד קוד ה-QR:' if LANG == 'he' else 'Title to appear next to QR code:'}</label>
+      <input type="text" id="videolb-qr-title" dir="auto" placeholder="{'הקלד כותרת קצרה לסרטון (ליד ה-QR)...' if LANG == 'he' else 'Enter a short title to print next to the QR...'}">
+    </div>
     <div class="videolb-actions">
       <a class="videolb-open-btn" id="videolb-open-btn" target="_blank" rel="noopener noreferrer">
         <span class="videolb-icon">▶</span>
@@ -607,24 +648,24 @@ videolb_html = f"""
 if LANG == "he":
     guide_note = """<div class="note" dir="rtl" style="text-align:right"><b>איך לסמן ולערוך באלבום:</b>
 <ul style="margin:6px 0 0;padding-inline-start:20px;line-height:1.6">
-<li><b>החלפה / הסרה של תמונה באלבום (✕):</b> לחצו על האיקס האדום <b>✕</b> על התמונה בדפי האלבום ובחרו תמונה חלופית או סמנו להסרה.</li>
-<li><b>סימון בסימן שאלה (?):</b> לחצו על כפתור <b>?</b> הכתום על גבי כל תמונה באלבום (למשל לתמונות שאתם מתלבטים לגביהן או רוצים לבדוק).</li>
-<li><b>סימון תמונות שלא באלבום בכוכב (★):</b> באינדקס התמונות המלא בתחתית, לחצו על כפתור <b>★</b> כדי לסמן תמונות שאהבתם.</li>
-<li><b>הגדלת תמונה באיכות מקסימלית (🔍):</b> לחצו על זכוכית המגדלת <b>🔍</b> על כל תמונה לצפייה במסך מלא באיכות גבוהה ישירות מ-Google Photos (דפדוף עם החצים או המקלדת).</li>
-<li><b>החלפת מקומות (Swap):</b> לפתיחת שתי תמונות באותו עמוד והחלפת מיקומן זו בזו.</li>
+<li><b>כפתורי פעולה במעבר עכבר:</b> העבירו את העכבר מעל כל תמונה (בדפי האלבום או באינדקס) כדי לחשוף את כפתורי ההחלפה (<b>✕</b>), סימן השאלה (<b>?</b>), הכוכב (<b>★</b>) וההגדלה (<b>🔍</b>).</li>
+<li><b>החלפה / הסרה / סימן שאלה:</b> לחצו על <b>✕</b> להחלפה או הסרה, על <b>?</b> לסימון התלבטות, או על התמונה עצמה להחלפת מקומות (Swap) ולהשוואת לפני/אחרי.</li>
+<li><b>סימון תמונות מועמדות בכוכב (★):</b> באינדקס התמונות המלא בתחתית, רחפו על תמונה מחוץ לאלבום ולחצו על <b>★</b> כדי לסמן מועדפות.</li>
+<li><b>הגדלה באיכות מקסימלית (🔍):</b> לחצו על <b>🔍</b> לצפייה במסך מלא באיכות גבוהה ישירות מ-Google Photos (דפדוף עם החצים או Esc).</li>
+<li><b>כותרות לסרטונים (ליד קוד ה-QR):</b> בגלריית הסרטונים למטה (או בלחיצה על קוד QR בדף), הקלידו כותרת קצרה לכל סרטון — היא מתעדכנת מיד ליד ה-QR ומתווספת להעתקת הסימונים.</li>
 </ul>
-כל הסימונים נשמרים ישירות בדפדפן! בסיום, לחצו על <b>Copy my marks</b> בתחתית המסך והדביקו לכאן בהודעה.
+התמונות מוצגות כברירת מחדל בגרסה המשופרת (<b>After tuning</b>; ניתן להשוות עם <b>Before</b> בסרגל). כל הסימונים והכותרות נשמרים בדפדפן! בסיום, לחצו על <b>Copy my marks</b> בתחתית המסך והדביקו לכאן בהודעה.
 </div>"""
 else:
     guide_note = """<div class="note"><b>How to review and mark the album:</b>
 <ul style="margin:6px 0 0;padding-inline-start:20px;line-height:1.6">
-<li><b>Replace / remove photo (✕):</b> Click the red ✕ on any photo in the album pages to choose a replacement or mark for removal.</li>
-<li><b>Mark with question mark (?):</b> Click the orange ? button on any photo to flag questions or uncertainties.</li>
-<li><b>Star candidate photos (★):</b> In the photo index at the bottom, click ★ on any photo outside the album to mark favorites.</li>
-<li><b>Enlarge high-res (🔍):</b> Click the magnifying glass 🔍 on any photo to open the fullscreen high-resolution viewer from Google Photos (navigate with arrow keys or Esc).</li>
-<li><b>Swap places:</b> Click a photo to open details and swap places with another photo on the same page or spread.</li>
+<li><b>Hover-only controls:</b> Hover over any photo (on spread pages or in the Photo Index) to reveal the Replace (<b>✕</b>), Question (<b>?</b>), Star (<b>★</b>), and Zoom (<b>🔍</b>) buttons.</li>
+<li><b>Replace / remove / question / swap:</b> Click <b>✕</b> to replace or remove, <b>?</b> to flag a question, or click the photo to open Before/After comparison and swap places on the page.</li>
+<li><b>Star candidate photos (★):</b> In the Photo Index at the bottom, hover any photo outside the album and click <b>★</b> to bookmark favorites.</li>
+<li><b>Enlarge high-res (🔍):</b> Click <b>🔍</b> to open the fullscreen high-resolution viewer from Google Photos (navigate with arrow keys or Esc).</li>
+<li><b>Video QR titles:</b> In the Videos Gallery below (or by clicking any QR code on a page), type a short title for each video — it previews live next to the QR code and exports with your marks.</li>
 </ul>
-All marks are saved in your browser! When done, click <b>Copy my marks</b> at the bottom and paste the list in chat.
+Photos are shown in their enhanced (<b>After tuning</b>) view by default (toggle <b>Show: After tuning</b> to compare with Before). All marks &amp; titles are saved in your browser — click <b>Copy my marks</b> at the bottom and paste the list in chat.
 </div>"""
 
 html = f"""<!doctype html>
@@ -644,7 +685,7 @@ html = f"""<!doctype html>
 .textpage.opening b{{font-size:1.4em}} .textpage.opening i{{font-style:normal;color:var(--muted)}}
 .facts h3 small{{font-weight:400;color:var(--muted);font-size:13px}}</style>
 </head>
-<body>
+<body class="after">
 <div class="wrap">
 <h1>{escape(ALBUM_TITLE)}</h1>
 <div class="muted">{ALBUM_LINE} · book reads <b>right to left</b>, place names in {LANG_NAME}</div>
@@ -676,7 +717,7 @@ html = f"""<!doctype html>
 <li><b>Margins:</b> to close wide empty margins, a frame may trim at most 5% off one side of a photo. No important detail is lost at that size. Average page fill: {sum(fills) / len(fills) * 100:.0f}%.</li>
 <li><b>Order:</b> camera time{globals().get('ORDER_NOTE', ', with wrong camera clocks fixed')}. Photos from the same place (drone shots too) are grouped.</li>
 <li><b>Big photo every 5–7 pages</b> ({n_hero} full pages, {n_spread} spreads, map on page 4).</li>
-<li><b>Tuning:</b> per-photo brightness / contrast / saturation. Use the <b>Before / After</b> button.</li>
+<li><b>Tuning:</b> per-photo brightness / contrast / saturation (shown <b>After tuning</b> by default; click <b>Show: After tuning</b> to compare with Before).</li>
 </ul>
 <table>{reason_rows}</table>
 </div>
@@ -701,7 +742,7 @@ html = f"""<!doctype html>
 <h2>Page-by-page plan</h2>
 <div class="muted">Each row is one open spread as the book reads: <b>right page first</b>, then left. Pages are drawn to scale ({PW:g}×{PH_CM:g} cm). The yellow tag is the photo number.</div>
 <div class="toolbar">
-  <button id="ba">Show: Before</button>
+  <button id="ba" class="on">Show: After tuning</button>
   <span class="muted">Jump to page</span><input type="search" id="jump" placeholder="e.g. 48">
   <a class="btn" href="#index">Photo index ↓</a>
   <a class="btn" href="#videos" style="background:#047857;color:#fff">{jump_vids}</a>

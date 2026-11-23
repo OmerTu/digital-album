@@ -58,8 +58,8 @@ Write PRODUCT_HTML and THEMES in the config. The user decides.
 
 ## Stage 5 · Changes (as many rounds as the user wants)
 Interactive marks from the plan ("Copy my marks") or plain chat requests:
-- **Interactive tools**: Fullscreen high-res lightbox (`🔍`, keyboard arrow navigation, Esc), Star (★) to bookmark candidates from the Photo Index, Question Mark (?) to flag photos or videos with questions, Video Gallery with direct Google Photos links and star/question marking, Replace (✕), Swap, and Add back. Candidate photos outside the album keep 100% opacity for comfortable review.
-- Apply marks in the config (`REPLACE`, `FORCE_OUT`, `FORCE_KEEP`, `PAGE_CHUNKS`, `CAPTIONS`, etc.), rebuild, check each change really happened, show it. Details: `references/plan-page.md`. Typical requests:
+- **Interactive tools**: Photos display in their tuned (**After tuning**) view by default (toggleable with Before). Photo action buttons (`✕`, `?`, `★`, `🔍`) appear only on hover over each photo (same for video thumbnail buttons). Fullscreen high-res lightbox (`🔍`, keyboard arrow navigation, Esc), Star (`★`) to bookmark candidates from the Photo Index, Question Mark (`?`) to flag photos or videos with questions, Video Gallery with direct Google Photos links, star/question marking, and inline **per-video QR title** inputs (also editable in the video modal and enlarged QR modal, updating the label next to the QR code live), Replace (`✕`), Swap, and Add back. Candidate photos outside the album keep 100% opacity for comfortable review.
+- Apply marks in the config (`REPLACE`, `FORCE_OUT`, `FORCE_KEEP`, `PAGE_CHUNKS`, `CAPTIONS`, `VIDEO_TITLES`, `QR_CODES`, etc.), rebuild, check each change really happened, show it. Details: `references/plan-page.md`. Typical requests:
 replace, swap, add back, full page, background photo, straighten (test 3 angles on a grid, pick by eye),
 enhance (show before/after), new photos from a new link (fetch into a sub-folder, number them after the last
 photo), move or reword a title, cover photo and cover title (`make_cover_photo.py`, `make_cover_title.py` — note Picabook places crisp native editable cover & spine text directly over `000_cover.jpg`).
@@ -77,7 +77,7 @@ Use Antigravity's built-in Browser Subagent (`/browser`) or Chrome DevTools / Pl
 ## Stage 7 · QR codes
 Offer a QR code per place that has a video album or itinerary doc (`make_qr.py` with dual-detector verification). Ask for each link, name it from the linked
 item's own date and place, and place it in the top margin (`x=1.0, y=0.22, s=1.92`) or on background with the layering rules: `references/qr-rules.md`.
-In Picabook (`PICABOOK_NATIVE_QR = True`), `picabook_layout.py` emits native vector QR codes (`הוסף קוד קישור`) plus a native `Heebo Unicode` caption (`title_he`) underneath and automatically shifts page headers to avoid collisions. A QR is always the top layer, never crosses a photo's edge, and opens direct links in the plan modal.
+In Picabook (`PICABOOK_NATIVE_QR = True`), `picabook_layout.py` emits native vector QR codes (`הוסף קוד קישור`) plus a native `Heebo Unicode` caption (from `VIDEO_TITLES` or `title_he`) placed next to the QR code (falling back below if side margin is tight) and automatically shifts page headers to avoid collisions. A QR is always the top layer, never crosses a photo's edge, and opens direct links (with inline title editing) in the plan modal.
 
 ## Stage 8 · Final check, then the user orders
 1. `python3 check_book.py`: sharpness of every photo, cropping, overlaps, duplicates, native text bounds & non-repetition, QR size / trim / top layer / straddling. In Picabook also `claudePicabook.check()` (or visual spread pass); in Lupa `claudeLupa.check()`.

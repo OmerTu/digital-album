@@ -35,6 +35,11 @@ CAPTION_PT = int(getattr(C, "PICABOOK_CAPTION_PT", 11))
 NATIVE_QR = bool(getattr(C, "PICABOOK_NATIVE_QR", True))
 NATIVE_COVER_TEXT = bool(getattr(C, "PICABOOK_NATIVE_COVER_TEXT", True))
 WHITE_BG = bool(getattr(C, "PAGE_BG_WHITE", True))
+VIDEO_TITLES: dict[int, str] = {
+    int(k): str(v).strip()
+    for k, v in (getattr(C, "VIDEO_TITLES", None) or {}).items()
+    if str(k).lstrip("-").isdigit()
+}
 
 SAFE_CM = 0.8  # keep text & QR codes >= 0.8 cm inside outer trim edges
 MAP_FILE = "ready/upload/003_map.jpg"
@@ -431,19 +436,76 @@ def build_merged_spread_items(
     return frames, texts
 
 
+def resolve_qr_label(q: dict[str, Any]) -> str:
+    """Resolve the title placed next to a QR code: VIDEO_TITLES[video_n] overrides/fills title_he."""
+    vn = q.get("video_n")
+    if vn is not None:
+        try:
+            vn_int = int(vn)
+            if vn_int in VIDEO_TITLES:
+                return VIDEO_TITLES[vn_int]
+        except (TypeError, ValueError):
+            pass
+    return str(q.get("title_he") or q.get("title") or "").strip()
+
+
 def attach_qrs_and_avoid_title_collisions(
     sp: dict[str, Any],
     qrs_for_spread: list[tuple[dict[str, Any], float, str]],
 ) -> None:
-    """Add QR elements + native Hebrew labels, nudging any page header on the same margin if needed."""
+    """Add QR elements + native caption labels next to each QR, nudging any page header if needed."""
     sp_qrs: list[dict[str, Any]] = []
+
+    def _overlaps(a: tuple[float, float, float, float], b: tuple[float, float, float, float], pad: float = 0.0) -> bool:
+        return not (a[2] <= b[0] - pad or b[2] <= a[0] - pad or a[3] <= b[1] - pad or b[3] <= a[1] - pad)
+
+    def _hits_photo(x: float, y: float, w: float, h: float) -> bool:
+        bx = (x, y, x + w, y + h)
+        return any(
+            not f.get("bleed") and _overlaps(bx, (f["x"], f["y"], f["x"] + f["w"], f["y"] + f["h"]))
+            for f in sp["frames"]
+        )
+
+    def _hits_text(x: float, y: float, w: float, h: float, roles: tuple[str, ...] = ("page_title", "qr_caption")) -> bool:
+        bx = (x, y, x + w, y + h)
+        return any(
+            t.get("role") in roles and _overlaps(bx, (t["x"], t["y"], t["x"] + t["w"], t["y"] + t["h"]), pad=0.12)
+            for t in sp["texts"]
+        )
+
+    def _nudge_page_titles_for_box(bx0: float, by0: float, bx1: float, by1: float, ox: float) -> None:
+        for t in sp["texts"]:
+            if t["role"] != "page_title":
+                continue
+            tcx = t["x"] + t["w"] / 2
+            if not (ox - 0.1 <= tcx <= ox + PW + 0.1):
+                continue
+            overlap_y = not (t["y"] + t["h"] < by0 - 0.12 or by1 + 0.12 < t["y"])
+            overlap_x = not (t["x"] + t["w"] < bx0 - 0.25 or bx1 + 0.25 < t["x"])
+            if overlap_x and overlap_y:
+                page_left = round(ox + SAFE_CM, 2)
+                page_right = round(ox + PW - 1.0, 2)
+                if (bx0 + bx1) / 2 < ox + PW * 0.55:
+                    new_left = round(bx1 + 0.35, 2)
+                    right_edge = max(t["x"] + t["w"], min(page_right, round(new_left + t["w"], 2)))
+                    if right_edge - new_left >= 4.5:
+                        t["x"] = new_left
+                        t["w"] = round(right_edge - new_left, 2)
+                else:
+                    new_right = round(bx0 - 0.35, 2)
+                    new_left = max(page_left, round(new_right - t["w"], 2))
+                    if new_right - new_left >= 4.5:
+                        t["x"] = new_left
+                        t["w"] = round(new_right - new_left, 2)
+
     for q, ox, url in qrs_for_spread:
         qx = round(ox + float(q["x"]), 2)
         qy = round(float(q["y"]), 2)
         qs = round(float(q["s"]), 2)
-        label = (q.get("title_he") or "").strip()
+        label = resolve_qr_label(q)
         qr_entry = {
             "page": q["page"],
+            "video_n": q.get("video_n"),
             "mode": "native" if NATIVE_QR else "image",
             "url": url,
             "file": q.get("file", ""),
@@ -459,48 +521,48 @@ def attach_qrs_and_avoid_title_collisions(
         sp_qrs.append(qr_entry)
 
         # Keep page titles clear of this QR box
-        for t in sp["texts"]:
-            if t["role"] != "page_title":
-                continue
-            overlap_y = not (t["y"] + t["h"] < qy - 0.15 or qy + qs + 0.55 < t["y"])
-            overlap_x = not (t["x"] + t["w"] < qx - 0.25 or qx + qs + 0.25 < t["x"])
-            if overlap_x and overlap_y:
-                # Shift or narrow the title box to stay to the right of a left-margin QR (or left of a right-margin QR)
-                if qx < (PW if t["x"] < PW else SW) - 6.0:
-                    new_left = round(qx + qs + 0.4, 2)
-                    right_edge = t["x"] + t["w"]
-                    if right_edge - new_left >= 4.5:
-                        t["x"] = new_left
-                        t["w"] = round(right_edge - new_left, 2)
-                else:
-                    new_right = round(qx - 0.4, 2)
-                    if new_right - t["x"] >= 4.5:
-                        t["w"] = round(new_right - t["x"], 2)
+        _nudge_page_titles_for_box(qx, qy, qx + qs, qy + qs, ox)
 
-        # Native Hebrew label right below the QR code (when clearance above photos allows)
+        # Native caption label NEXT TO the QR code (horizontally adjacent, vertically centered),
+        # falling back to directly below if neither horizontal side fits cleanly.
         if label:
-            ly = round(qy + qs + 0.05, 2)
-            lh = 0.48
-            lw = round(max(qs + 1.2, min(4.2, len(label) * 0.18 + 0.8)), 2)
-            lx = round(max(ox + 0.5, min(ox + PW - 0.5 - lw, qx + qs / 2 - lw / 2)), 2)
-            hits_photo = any(
-                not f.get("bleed")
-                and not (lx + lw < f["x"] or f["x"] + f["w"] < lx or ly + lh < f["y"] or f["y"] + f["h"] < ly)
-                for f in sp["frames"]
-            )
-            if not hits_photo and ly + lh <= PH - 0.3:
-                color, shadow = sample_ink(sp["frames"], (lx, ly, lx + lw, ly + lh))
+            lh = 0.65
+            lw = round(max(2.4, min(6.5, len(label) * (CAPTION_PT * 0.022) + 0.9)), 2)
+            ly_side = round(max(0.22, min(PH - 0.3 - lh, qy + (qs - lh) / 2)), 2)
+            prefer_right = (float(q["x"]) + qs / 2) <= PW * 0.55
+
+            cand_right = (round(qx + qs + 0.18, 2), ly_side, lw, lh, "left")
+            cand_left = (round(qx - 0.18 - lw, 2), ly_side, lw, lh, "right")
+            lx_below = round(max(ox + 0.5, min(ox + PW - 0.5 - lw, qx + qs / 2 - lw / 2)), 2)
+            cand_below = (lx_below, round(qy + qs + 0.06, 2), lw, 0.52, "center")
+
+            candidates = ([cand_right, cand_left, cand_below] if prefer_right else [cand_left, cand_right, cand_below])
+            placed = None
+            for cx, cy, cw, ch, calign in candidates:
+                if cx < ox + 0.45 or cx + cw > ox + PW - 0.45 or cy < 0.18 or cy + ch > PH - 0.25:
+                    continue
+                if _hits_photo(cx, cy, cw, ch):
+                    continue
+                if _hits_text(cx, cy, cw, ch):
+                    _nudge_page_titles_for_box(cx, cy, cx + cw, cy + ch, ox)
+                if not _hits_text(cx, cy, cw, ch):
+                    placed = (cx, cy, cw, ch, calign)
+                    break
+
+            if placed:
+                lx, ly, cw, ch, calign = placed
+                color, shadow = sample_ink(sp["frames"], (lx, ly, lx + cw, ly + ch))
                 sp["texts"].append(
                     make_text(
                         label,
                         lx,
                         ly,
-                        lw,
-                        lh,
+                        cw,
+                        ch,
                         role="qr_caption",
                         size_pt=CAPTION_PT,
                         bold=True,
-                        align="center",
+                        align=calign,
                         color=color,
                         shadow=shadow,
                     )

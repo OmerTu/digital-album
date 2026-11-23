@@ -58,7 +58,7 @@ Picabook's browser editor (`https://editor.picabook.co.il/?open=<GUID>`, powered
    - Every photo frame accepts exact `x, y, width, height` in **cm** (`input.inputsDimsPos`), layer ordering (`שכבות`), border width/colour, and seamless cross-fold placement on הדפסת יהלום spreads.
    - Original filenames are preserved on upload (`012_004_n045.jpg`), with no 800 px minimum-size rejection.
 3. **Native QR Code tool (`QR Code`):**
-   - Left toolbar `QR Code` button generates crisp vector QR objects directly from a URL (`הוסף קוד קישור`), paired with a native `Heebo Unicode` caption box right underneath (`title_he`). Pre-rendered `make_qr.py` tiles are also supported when custom background tinting is desired.
+   - Left toolbar `QR Code` button generates crisp vector QR objects directly from a URL (`הוסף קוד קישור`), paired with a native `Heebo Unicode` caption box placed right next to it (from `VIDEO_TITLES` or `title_he`, falling back below if horizontal space is tight). Pre-rendered `make_qr.py` tiles are also supported when custom background tinting is desired.
 
 ---
 
@@ -119,7 +119,7 @@ Work spread by spread (or only changed spreads), batching operations per spread 
    - Double-click to type `t.text`, select `mat-select.fontSelect` → **`Heebo Unicode`** (or configured font), set `numericInput` font size (`t.size_pt`), click `.icon_bold` when `t.bold` is true, set alignment (`.icon_alignright` / `.icon_aligncenter` / `.icon_alignleft`) and direction (`.RTLdir` / `.LTRdir`), set colour (`בחר צבע:`), enable `הצללה` shadow if `t.shadow` is true (`ink == "light"`), and set exact `x, y` cm in `מיקום` (`input.inputsDimsPos`).
 5. **QR codes (`spread.qrs`):**
    - Click **`QR Code`** in the left toolbar → enter `q.url` in the modal input → click **`הוסף קוד קישור`**.
-   - Position & size the QR element to `(q.x, q.y, q.s, q.s)` cm, bring to front (`שכבות` → top layer), and add a small native `Heebo Unicode` text box right below it with `q.title_he`.
+   - Position & size the QR element to `(q.x, q.y, q.s, q.s)` cm, bring to front (`שכבות` → top layer), and place the paired `qr_caption` native `Heebo Unicode` text box from `spread.texts` right next to it with `q.title_he`.
 6. **Save every few spreads:** press `Control+s` / `Meta+s` (triggers `POST /api/v1/Project/SaveProjectComplete` + `SaveComplete`) and click **`אישור`** on `"הפרוייקט נשמר בהצלחה"`.
 
 #### Path B · Chrome DevTools MCP / Console JS (`scripts/picabook_apply.js`)

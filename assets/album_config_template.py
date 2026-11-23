@@ -128,11 +128,16 @@ MAP_NOTE = ""
 ROUTE_MILES_ACTUAL = None  # odometer / rental bill, when known
 STATE_LABEL_AT: dict[str, tuple[float, float]] = {}  # US trips: move a state's name
 
-# ---- QR codes (make_qr.py; rules in references/qr-rules.md) -------------------------------------------------
+# ---- QR codes & video titles (make_qr.py; rules in references/qr-rules.md) ------------------------------------
 # page = plan page no; x/y = top-left and s = size, in cm on that page (29x22 for Picabook, 30x22 for Lupa);
-# bg = page colour under the code; t = a unique EXIF second; title_he = label rendered under the QR;
+# bg = page colour under the code; t = a unique EXIF second; title_he = label rendered next to the QR;
 # url = direct link opened on click and encoded in Picabook's native QR element.
 # Top-margin placement (x=1.0, y=0.22, s=1.92) keeps clearance above photos starting at y >= 2.4 cm.
+# VIDEO_TITLES maps video # -> short title printed next to its QR code (overrides/fills QR_CODES title_he,
+# and lets you pre-name videos from the album planner before placing their QR codes).
+VIDEO_TITLES: dict[int, str] = {
+    # 14: "סרטוני רומא",
+}
 QR_CODES: list[dict] = [
     # {"file": "ready/upload/qr_2026-05-02_rome.jpg", "src": "qr-codes/2026-05-02_rome.jpg", "bg": (255, 255, 255),
     #  "t": 41, "page": 12, "x": 1.0, "y": 0.22, "s": 1.92, "title_he": "סרטוני רומא", "video_n": 14,

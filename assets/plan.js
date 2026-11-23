@@ -1,10 +1,88 @@
 const src = n => 'data:image/jpeg;base64,' + I[n];
 const filt = t => `brightness(${1 + t.bright / 100}) contrast(${1 + t.contrast / 100}) saturate(${1 + t.sat / 100})`;
+const escAttr = s => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const hasOwn = (obj, k) => !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 const KEY = STORE_KEY;
 let M = {};
 try { M = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { M = {}; }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(M)); } catch (e) {} refreshMarks(); };
 const isHebrew = (document.documentElement.lang === 'he') || (typeof LANG !== 'undefined' && LANG === 'he') || document.dir === 'rtl';
+
+function findVideo(n) {
+  return (typeof V !== 'undefined' && Array.isArray(V)) ? V.find(x => String(x.n) === String(n)) : null;
+}
+
+function getVideoTitle(n) {
+  n = String(n);
+  if (M[n] && hasOwn(M[n], 'qr_title')) return M[n].qr_title || '';
+  const v = findVideo(n);
+  return (v && v.qr_title) || '';
+}
+
+function setVideoTitle(n, rawVal) {
+  n = String(n);
+  const v = findVideo(n);
+  const initial = ((v && v.qr_title) || '').trim();
+  const trimmed = String(rawVal || '').trim();
+  if (trimmed === initial) {
+    if (M[n]) {
+      delete M[n].qr_title;
+      if (!M[n].kind && !M[n].note) delete M[n];
+    }
+  } else {
+    if (!M[n]) M[n] = { kind: '', note: '', is_video: true };
+    M[n].qr_title = trimmed;
+    M[n].is_video = true;
+  }
+  save();
+}
+
+function setStandaloneQrTitle(qrIdx, rawVal, pageNo, origNote, initTitle) {
+  const key = 'qr_' + qrIdx;
+  const initial = String(initTitle || '').trim();
+  const trimmed = String(rawVal || '').trim();
+  if (trimmed === initial) {
+    delete M[key];
+  } else {
+    M[key] = {
+      kind: '',
+      qr_title: trimmed,
+      qr_page: pageNo || '',
+      qr_note: origNote || '',
+      is_qr: true,
+    };
+  }
+  save();
+}
+
+function syncQrLabels() {
+  document.querySelectorAll('.qr-wrap').forEach(wrap => {
+    const vn = wrap.dataset.videoN;
+    const qidx = wrap.dataset.qrIdx;
+    const initTitle = wrap.dataset.initTitle || '';
+    let title = initTitle;
+    if (vn && M[vn] && hasOwn(M[vn], 'qr_title')) {
+      title = M[vn].qr_title || '';
+    } else if (qidx !== undefined && qidx !== '' && M['qr_' + qidx] && hasOwn(M['qr_' + qidx], 'qr_title')) {
+      title = M['qr_' + qidx].qr_title || '';
+    }
+    let lbl = wrap.querySelector('.qr-label');
+    if (title) {
+      if (!lbl) {
+        lbl = document.createElement('span');
+        lbl.className = 'qr-label he';
+        lbl.setAttribute('dir', 'auto');
+        wrap.appendChild(lbl);
+      }
+      lbl.textContent = title;
+      lbl.style.display = '';
+    } else if (lbl) {
+      lbl.textContent = '';
+      lbl.style.display = 'none';
+    }
+    wrap.dataset.curTitle = title;
+  });
+}
 
 // Set up album photo tiles
 document.querySelectorAll('.ph').forEach(el => {
@@ -72,9 +150,14 @@ Object.values(D).sort((a, b) => a.o - b.o).forEach(p => {
 function toggle(n, kind) {
   n = String(n);
   if (M[n] && M[n].kind === kind) {
-    delete M[n];
+    if (hasOwn(M[n], 'qr_title')) {
+      M[n].kind = '';
+      M[n].with = '';
+    } else {
+      delete M[n];
+    }
   } else {
-    M[n] = { kind, note: (M[n] && M[n].note) || '', with: (M[n] && M[n].with) || '' };
+    M[n] = { ...(M[n] || {}), kind, note: (M[n] && M[n].note) || '', with: (M[n] && M[n].with) || '' };
   }
   save();
 }
@@ -122,26 +205,46 @@ function refreshMarks() {
     vgrid.querySelectorAll('.vc').forEach(c => {
       const n = c.dataset.n;
       const m = M[n];
-      const isStar = m && m.kind === 'star';
-      const isQ = m && m.kind === 'question';
+      const v = findVideo(n);
+      const isStar = !!(m && m.kind === 'star');
+      const isQ = !!(m && m.kind === 'question');
+      const hasCustomTitle = !!(m && hasOwn(m, 'qr_title'));
+      const curTitle = getVideoTitle(n);
 
       c.classList.toggle('starred', isStar);
       c.classList.toggle('marked-q', isQ);
+      c.classList.toggle('has-title', !!curTitle);
+      c.classList.toggle('title-edited', hasCustomTitle);
+
+      const inp = c.querySelector('.vc-qr-title');
+      if (inp && document.activeElement !== inp && inp.value !== curTitle) {
+        inp.value = curTitle;
+      }
+
+      const stTitle = c.querySelector('.vc-status-title');
+      if (stTitle && v && v.in_album) {
+        stTitle.textContent = curTitle ? ` (${curTitle})` : '';
+      }
 
       const mkl = c.querySelector('.v-mkl');
       if (mkl) {
-        if (isStar) mkl.innerHTML = `· <span class="st star">★ ${isHebrew ? 'מועדף' : 'STARRED'}</span>`;
-        else if (isQ) mkl.innerHTML = `· <span class="st qmark">? ${isHebrew ? 'שאלה' : 'QUESTION'}${m.note ? ': ' + m.note : ''}</span>`;
-        else mkl.textContent = '';
+        const badges = [];
+        if (isStar) badges.push(`<span class="st star">★ ${isHebrew ? 'מועדף' : 'STARRED'}</span>`);
+        else if (isQ) badges.push(`<span class="st qmark">? ${isHebrew ? 'שאלה' : 'QUESTION'}${m.note ? ': ' + escAttr(m.note) : ''}</span>`);
+        if (hasCustomTitle) badges.push(`<span class="st vtitle">🏷️ ${isHebrew ? 'כותרת עודכנה' : 'TITLE SET'}</span>`);
+        mkl.innerHTML = badges.length ? '· ' + badges.join(' · ') : '';
       }
     });
   }
+
+  syncQrLabels();
 
   const r = Object.values(M).filter(m => m.kind === 'replace').length;
   const a = Object.values(M).filter(m => m.kind === 'add').length;
   const w = Object.values(M).filter(m => m.kind === 'swap').length;
   const q = Object.values(M).filter(m => m.kind === 'question').length;
   const s = Object.values(M).filter(m => m.kind === 'star').length;
+  const t = Object.values(M).filter(m => hasOwn(m, 'qr_title')).length;
 
   const parts = [];
   if (r) parts.push(`Replace: ${r}`);
@@ -149,6 +252,7 @@ function refreshMarks() {
   if (a) parts.push(`Add back: ${a}`);
   if (q) parts.push(`Questions (?): ${q}`);
   if (s) parts.push(`Starred (★): ${s}`);
+  if (t) parts.push(`QR titles: ${t}`);
 
   document.getElementById('markcount').textContent = parts.length ? parts.join(' · ') : 'No marks yet';
   apply();
@@ -160,12 +264,18 @@ function refreshMarks() {
 function marksText() {
   const photoEntries = [];
   const videoEntries = [];
+  const qrEntries = [];
 
   Object.entries(M).forEach(([n, m]) => {
+    if (!m) return;
+    if (m.is_qr) {
+      qrEntries.push([n, m]);
+      return;
+    }
     const isVid = m.is_video || (typeof V !== 'undefined' && V.some(v => String(v.n) === String(n)));
     if (isVid) {
       videoEntries.push([n, m]);
-    } else {
+    } else if (m.kind || m.note) {
       photoEntries.push([n, m]);
     }
   });
@@ -191,23 +301,43 @@ function marksText() {
     });
   }
 
-  if (videoEntries.length) {
+  if (videoEntries.length || qrEntries.length) {
     if (lines.length) lines.push('');
-    lines.push(isHebrew ? '=== סימוני סרטונים ===' : '=== Video marks ===');
+    lines.push(isHebrew ? '=== סימונים וכותרות סרטונים / QR ===' : '=== Video & QR marks / titles ===');
     videoEntries.sort((a, b) => Number(a[0]) - Number(b[0])).forEach(([n, m]) => {
-      const v = (typeof V !== 'undefined' ? V : []).find(x => String(x.n) === String(n)) || {};
+      const v = findVideo(n) || {};
       const albStatus = v.in_album ? (isHebrew ? `באלבום, עמוד ${v.page || '–'}` : `in album, p. ${v.page || '–'}`) : (isHebrew ? 'מחוץ לאלבום' : 'outside album');
+      const hasTitle = hasOwn(m, 'qr_title');
+      const titleSuffix = hasTitle
+        ? (m.qr_title
+          ? (isHebrew ? ` | כותרת ליד ה-QR: "${m.qr_title}"` : ` | QR title: "${m.qr_title}"`)
+          : (isHebrew ? ' | הסר כותרת QR' : ' | remove QR title'))
+        : '';
       if (m.kind === 'star') {
-        lines.push(isHebrew
+        lines.push((isHebrew
           ? `★ סרטון מועדף #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${v.pl ? ' · ' + v.pl : ''}${m.note ? ` — ${m.note}` : ''}`
-          : `★ Starred video #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${v.pl ? ' · ' + v.pl : ''}${m.note ? ` — ${m.note}` : ''}`);
+          : `★ Starred video #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${v.pl ? ' · ' + v.pl : ''}${m.note ? ` — ${m.note}` : ''}`) + titleSuffix);
       } else if (m.kind === 'question') {
-        lines.push(isHebrew
+        lines.push((isHebrew
           ? `? שאלה על סרטון #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${m.note ? `: ${m.note}` : ''}`
-          : `? Question on video #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${m.note ? `: ${m.note}` : ''}`);
-      } else {
+          : `? Question on video #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${m.note ? `: ${m.note}` : ''}`) + titleSuffix);
+      } else if (hasTitle) {
+        const titleAction = m.qr_title
+          ? (isHebrew ? `כותרת ליד ה-QR: "${m.qr_title}"` : `QR title: "${m.qr_title}"`)
+          : (isHebrew ? 'הסר כותרת QR' : 'remove QR title');
+        lines.push(isHebrew
+          ? `🏷️ כותרת לסרטון #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${v.pl ? ' · ' + v.pl : ''} — ${titleAction}`
+          : `🏷️ Video title #${n} (${albStatus}${v.dur_str ? ', ' + v.dur_str : ''})${v.pl ? ' · ' + v.pl : ''} — ${titleAction}`);
+      } else if (m.kind) {
         lines.push(`Video #${n} (${m.kind})${m.note ? ` — ${m.note}` : ''}`);
       }
+    });
+    qrEntries.forEach(([, m]) => {
+      if (!hasOwn(m, 'qr_title')) return;
+      const action = m.qr_title ? `"${m.qr_title}"` : (isHebrew ? 'הסר כותרת' : 'remove title');
+      lines.push(isHebrew
+        ? `🏷️ כותרת לקוד QR (עמוד ${m.qr_page || '–'})${m.qr_note ? ' · ' + m.qr_note : ''} — ${action}`
+        : `🏷️ QR code title (page ${m.qr_page || '–'})${m.qr_note ? ' · ' + m.qr_note : ''} — ${action}`);
     });
   }
 
@@ -284,11 +414,11 @@ function show(n) {
     const fill = wide => {
       const near = wide ? secs.slice(Math.max(0, si - 1), si + 2) : [p.sec];
       const list = Object.values(D).filter(x => near.includes(x.sec) && String(x.n) !== n && (!x.k || wide)).sort((a, b) => (a.k - b.k) || (b.sc - a.sc) || (a.o - b.o));
-      document.getElementById('cands').innerHTML = list.map(x => `<div class="cand ${m && m.with == x.n ? 'sel' : ''} ${x.k ? 'inalb' : ''}" data-w="${x.n}" title="${x.s}"><img src="${src(x.n)}" alt="#${x.n}"><i>${x.n}</i>${x.k ? '<em>in album</em>' : x.sc ? '<em>cut</em>' : ''}</div>`).join('') || '<span class="muted">No other photos from this place — try "More from nearby places" or type a number.</span>';
+      document.getElementById('cands').innerHTML = list.map(x => `<div class="cand ${m && m.with == x.n ? 'sel' : ''} ${x.k ? 'inalb' : ''}" data-w="${x.n}" title="${escAttr(x.s)}"><img src="${src(x.n)}" alt="#${x.n}" style="--f:${filt(x.t)}"><i>${x.n}</i>${x.k ? '<em>in album</em>' : x.sc ? '<em>cut</em>' : ''}</div>`).join('') || '<span class="muted">No other photos from this place — try "More from nearby places" or type a number.</span>';
       document.querySelectorAll('#cands .cand').forEach(c => c.onclick = () => setWith(c.dataset.w));
     };
     fill(false);
-    document.getElementById('mates').innerHTML = (p.mt || []).map(x => `<div class="cand ${m && m.kind === 'swap' && m.with == x ? 'sel' : ''}" data-s="${x}" title="${D[x].s}"><img src="${src(x)}" alt="#${x}"><i>${x}</i></div>`).join('') || '<span class="muted">This photo is alone on its page.</span>';
+    document.getElementById('mates').innerHTML = (p.mt || []).map(x => `<div class="cand ${m && m.kind === 'swap' && m.with == x ? 'sel' : ''}" data-s="${x}" title="${escAttr(D[x].s)}"><img src="${src(x)}" alt="#${x}" style="--f:${filt(D[x].t)}"><i>${x}</i></div>`).join('') || '<span class="muted">This photo is alone on its page.</span>';
     document.querySelectorAll('#mates .cand').forEach(c => c.onclick = () => { const w = c.dataset.s;
       if (M[n] && M[n].kind === 'swap' && M[n].with === w) delete M[n]; else M[n] = { kind: 'swap', with: w, note: (M[n] && M[n].note) || '' };
       save(); show(n); });
@@ -434,15 +564,26 @@ document.addEventListener('keydown', e => {
 });
 
 const ba = document.getElementById('ba');
-ba.onclick = () => {
-  document.body.classList.toggle('after');
-  ba.textContent = document.body.classList.contains('after') ? 'Show: After tuning' : 'Show: Before';
-  ba.classList.toggle('on');
-  if (currentZoomN) {
-    const p = D[currentZoomN];
-    photolbImg.style.filter = document.body.classList.contains('after') ? filt(p.t) : 'none';
+const syncBa = () => {
+  const isAfter = document.body.classList.contains('after');
+  if (ba) {
+    ba.textContent = isAfter ? 'Show: After tuning' : 'Show: Before';
+    ba.classList.toggle('on', isAfter);
   }
 };
+// Show tuned ("after effects") photos by default
+document.body.classList.add('after');
+syncBa();
+if (ba) {
+  ba.onclick = () => {
+    document.body.classList.toggle('after');
+    syncBa();
+    if (currentZoomN) {
+      const p = D[currentZoomN];
+      photolbImg.style.filter = document.body.classList.contains('after') ? filt(p.t) : 'none';
+    }
+  };
+}
 
 let mode = 'all';
 function apply() {
@@ -457,7 +598,7 @@ function apply() {
       || (mode === 'hero' && p.h)
       || (mode === 'star' && m && m.kind === 'star')
       || (mode === 'question' && m && m.kind === 'question')
-      || (mode === 'marked' && !!m);
+      || (mode === 'marked' && !!(m && (m.kind || m.note)));
     const okq = !q || String(p.n) === q || (p.pl + ' ' + p.s + ' ' + p.r).toLowerCase().includes(q);
     c.style.display = okm && okq ? '' : 'none';
   });
@@ -492,8 +633,9 @@ function renderVideoGrid() {
     const playBtn = `<button type="button" class="vc-btn play" title="${isHebrew ? 'צפה בסרטון ↗' : 'Watch video ↗'}">▶</button>`;
 
     const durBadge = v.dur_str ? `<span class="vc-dur">${v.dur_str}</span>` : '';
+    const curTitle = getVideoTitle(v.n);
     const statusBadge = v.in_album
-      ? `<span class="st k">${isHebrew ? 'באלבום' : 'In album'}${v.page ? ' · ' + (isHebrew ? `עמוד ${v.page}` : `p. ${v.page}`) : ''}${v.qr_title ? ' (' + v.qr_title + ')' : ''}</span>`
+      ? `<span class="st k">${isHebrew ? 'באלבום' : 'In album'}${v.page ? ' · ' + (isHebrew ? `עמוד ${v.page}` : `p. ${v.page}`) : ''}<span class="vc-status-title">${curTitle ? ' (' + escAttr(curTitle) + ')' : ''}</span></span>`
       : `<span class="st o">${isHebrew ? 'מחוץ לאלבום' : 'Outside album'}</span>`;
 
     card.innerHTML = `
@@ -508,6 +650,12 @@ function renderVideoGrid() {
         <div class="vc-title"><b>#${v.n} · ${v.pl || ''}</b></div>
         <div class="vc-desc">${v.s || ''}</div>
         <div class="vc-date muted">${v.d || ''}</div>
+        <div class="vc-qr-title-wrap">
+          <label class="vc-qr-title-lbl" for="vt-${v.n}">${isHebrew ? 'כותרת ליד ה-QR:' : 'Title next to QR:'}</label>
+          <input type="text" class="vc-qr-title" id="vt-${v.n}" data-n="${v.n}" dir="auto"
+                 placeholder="${isHebrew ? 'הקלד כותרת שתופיע ליד ה-QR...' : 'Title to print next to QR...'}"
+                 value="${escAttr(curTitle)}">
+        </div>
         <div class="vc-foot">
           <a class="vc-watch-link" href="${v.su || v.qr_url || v.u || '#'}" target="_blank" rel="noopener noreferrer">
             <span>▶ ${isHebrew ? 'צפה בסרטון ↗' : 'Watch video ↗'}</span>
@@ -517,8 +665,17 @@ function renderVideoGrid() {
       </div>
     `;
 
+    const titleInp = card.querySelector('.vc-qr-title');
+    if (titleInp) {
+      titleInp.addEventListener('input', e => {
+        setVideoTitle(v.n, e.target.value);
+      });
+    }
+
     card.addEventListener('click', e => {
-      if (e.target.closest('.vc-btn.star')) {
+      if (e.target.closest('.vc-qr-title-wrap')) {
+        e.stopPropagation();
+      } else if (e.target.closest('.vc-btn.star')) {
         e.stopPropagation();
         toggleVideoMark(v.n, 'star');
       } else if (e.target.closest('.vc-btn.question')) {
@@ -543,9 +700,10 @@ function renderVideoGrid() {
 function toggleVideoMark(n, kind) {
   n = String(n);
   if (M[n] && M[n].kind === kind) {
-    delete M[n];
+    M[n].kind = '';
+    if (!M[n].note && !hasOwn(M[n], 'qr_title')) delete M[n];
   } else {
-    M[n] = { kind, note: (M[n] && M[n].note) || '', is_video: true };
+    M[n] = { ...(M[n] || {}), kind, note: (M[n] && M[n].note) || '', is_video: true };
   }
   save();
 }
@@ -556,27 +714,23 @@ function promptVideoQuestion(n) {
   const note = prompt(isHebrew ? `הערה או שאלה לגבי סרטון #${n}:` : `Question or note on video #${n}:`, cur);
   if (note === null) return;
   if (note.trim()) {
-    M[n] = { kind: 'question', note: note.trim(), is_video: true };
+    M[n] = { ...(M[n] || {}), kind: 'question', note: note.trim(), is_video: true };
   } else if (M[n] && M[n].kind === 'question') {
-    delete M[n];
+    M[n].kind = '';
+    M[n].note = '';
+    if (!hasOwn(M[n], 'qr_title')) delete M[n];
   }
   save();
 }
 
 function openVideoModal(n) {
-  const v = (typeof V !== 'undefined' ? V : []).find(x => x.n === n);
+  const v = findVideo(n);
   if (!v || !videolb) return;
-  currentVidN = n;
+  currentVidN = v.n;
 
   videolb.querySelector('#videolb-num').textContent = `#${v.n}`;
   videolb.querySelector('#videolb-dur-pill').textContent = v.dur_str || '';
   videolb.querySelector('#videolb-img').src = src(v.n);
-
-  const statusEl = videolb.querySelector('#videolb-status');
-  statusEl.className = 'videolb-status ' + (v.in_album ? 'k' : 'o');
-  statusEl.textContent = v.in_album
-    ? (isHebrew ? `באלבום · עמוד ${v.page || '–'}${v.qr_title ? ' (' + v.qr_title + ')' : ''}` : `In album · Page ${v.page || '–'}`)
-    : (isHebrew ? 'מחוץ לאלבום' : 'Outside album');
 
   videolb.querySelector('#videolb-place').textContent = v.pl || '';
   videolb.querySelector('#videolb-scene').textContent = v.s || '';
@@ -591,6 +745,12 @@ function openVideoModal(n) {
     openBtn.style.display = 'none';
   }
 
+  const titleIn = videolb.querySelector('#videolb-qr-title');
+  if (titleIn) {
+    titleIn.value = getVideoTitle(v.n);
+    titleIn.oninput = e => { setVideoTitle(v.n, e.target.value); };
+  }
+
   updateVideoModalMarks(v.n);
   videolb.classList.add('show');
 }
@@ -598,7 +758,20 @@ function openVideoModal(n) {
 function updateVideoModalMarks(n) {
   if (!videolb) return;
   n = String(n);
+  const v = findVideo(n);
   const m = M[n];
+  const curTitle = getVideoTitle(n);
+  const statusEl = videolb.querySelector('#videolb-status');
+  if (statusEl && v) {
+    statusEl.className = 'videolb-status ' + (v.in_album ? 'k' : 'o');
+    statusEl.textContent = v.in_album
+      ? (isHebrew ? `באלבום · עמוד ${v.page || '–'}${curTitle ? ' (' + curTitle + ')' : ''}` : `In album · Page ${v.page || '–'}${curTitle ? ' (' + curTitle + ')' : ''}`)
+      : (isHebrew ? 'מחוץ לאלבום' : 'Outside album');
+  }
+  const titleIn = videolb.querySelector('#videolb-qr-title');
+  if (titleIn && document.activeElement !== titleIn && titleIn.value !== curTitle) {
+    titleIn.value = curTitle;
+  }
   const starBtn = videolb.querySelector('#vlb-btn-star');
   const qBtn = videolb.querySelector('#vlb-btn-q');
   if (starBtn) {
@@ -639,15 +812,16 @@ function applyVideoFilters() {
     const v = V.find(x => String(x.n) === c.dataset.n);
     if (!v) return;
     const m = M[c.dataset.n];
+    const curTitle = getVideoTitle(v.n);
 
     const okm = vmode === 'all'
       || (vmode === 'in_album' && v.in_album)
       || (vmode === 'not_in_album' && !v.in_album)
       || (vmode === 'star' && m && m.kind === 'star')
       || (vmode === 'question' && m && m.kind === 'question')
-      || (vmode === 'marked' && !!m);
+      || (vmode === 'marked' && !!(m && (m.kind || hasOwn(m, 'qr_title'))));
 
-    const okq = !vq || String(v.n) === vq || (v.pl + ' ' + v.s + ' ' + (v.qr_title || '')).toLowerCase().includes(vq);
+    const okq = !vq || String(v.n) === vq || (v.pl + ' ' + v.s + ' ' + (v.qr_title || '') + ' ' + curTitle).toLowerCase().includes(vq);
     c.style.display = okm && okq ? '' : 'none';
   });
 }
@@ -666,7 +840,7 @@ if (vqEl) vqEl.oninput = applyVideoFilters;
 renderVideoGrid();
 refreshMarks();
 
-// Click a QR code to see it large and open direct link
+// Click a QR code (or its label) to see it large, edit its title, and open direct link
 (() => {
   const box = document.createElement('div');
   box.className = 'qrbig';
@@ -678,6 +852,10 @@ refreshMarks();
         <div class="qrbig-title"></div>
         <div class="qrbig-sub muted"></div>
       </div>
+      <div class="qrbig-edit">
+        <label for="qrbig-title-in">${isHebrew ? 'כותרת שתופיע ליד ה-QR:' : 'Title next to QR code:'}</label>
+        <input type="text" id="qrbig-title-in" class="qrbig-title-input" dir="auto" placeholder="${isHebrew ? 'הקלד כותרת שתופיע ליד ה-QR...' : 'Enter title to print next to QR...'}">
+      </div>
       <a class="qr-direct-link" target="_blank" rel="noopener noreferrer">
         <span class="qr-link-icon">↗</span>
         <span class="qr-link-text">${isHebrew ? 'פתח קישור ישיר בדפדפן' : 'Open direct link in browser'}</span>
@@ -686,18 +864,50 @@ refreshMarks();
   `;
   document.body.appendChild(box);
   const close = () => box.classList.remove('show');
+  const titleInput = box.querySelector('#qrbig-title-in');
+  let activeQrCtx = null;
+
+  titleInput.addEventListener('input', e => {
+    if (!activeQrCtx) return;
+    const val = e.target.value;
+    box.querySelector('.qrbig-title').textContent = val.trim() || activeQrCtx.fallbackTitle;
+    if (activeQrCtx.videoN) {
+      setVideoTitle(activeQrCtx.videoN, val);
+    } else if (activeQrCtx.qrIdx !== '') {
+      setStandaloneQrTitle(activeQrCtx.qrIdx, val, activeQrCtx.pageNo, activeQrCtx.fallbackTitle, activeQrCtx.initTitle);
+    }
+  });
 
   document.addEventListener('click', e => {
-    const q = e.target.closest('img.qr');
-    if (q) {
+    const clickedQr = e.target.closest('img.qr, .qr-label');
+    if (clickedQr) {
+      const wrap = clickedQr.closest('.qr-wrap');
+      const q = wrap ? wrap.querySelector('img.qr') : clickedQr;
+      if (!q) return;
       e.preventDefault(); e.stopPropagation();
-      const wrap = q.closest('.qr-wrap');
       const url = q.dataset.url || (wrap && wrap.dataset.url) || '';
       box.querySelector('img').src = q.src;
-      const title = (q.title || '').replace(/^QR · /, '');
+      const fallbackTitle = (q.title || '').replace(/^QR · /, '');
+      const curTitle = (wrap && (wrap.dataset.curTitle !== undefined ? wrap.dataset.curTitle : wrap.dataset.initTitle)) || '';
+      const initTitle = (wrap && wrap.dataset.initTitle) || '';
       const pageNo = (q.closest('[data-page]') || { dataset: {} }).dataset.page || '';
-      box.querySelector('.qrbig-title').textContent = title;
-      box.querySelector('.qrbig-sub').textContent = pageNo ? (isHebrew ? `עמוד ${pageNo}` : `Page ${pageNo}`) : '';
+      const videoN = (wrap && wrap.dataset.videoN) || '';
+      const qrIdx = (wrap && wrap.dataset.qrIdx !== undefined) ? wrap.dataset.qrIdx : '';
+
+      activeQrCtx = { videoN, qrIdx, pageNo, fallbackTitle, initTitle };
+      box.querySelector('.qrbig-title').textContent = curTitle || fallbackTitle;
+      const subParts = [];
+      if (pageNo) subParts.push(isHebrew ? `עמוד ${pageNo}` : `Page ${pageNo}`);
+      if (videoN) subParts.push(isHebrew ? `סרטון #${videoN}` : `Video #${videoN}`);
+      box.querySelector('.qrbig-sub').textContent = subParts.join(' · ');
+
+      const editWrap = box.querySelector('.qrbig-edit');
+      if (videoN || qrIdx !== '') {
+        editWrap.style.display = '';
+        titleInput.value = curTitle;
+      } else {
+        editWrap.style.display = 'none';
+      }
 
       const link = box.querySelector('a.qr-direct-link');
       if (url) {
@@ -714,8 +924,7 @@ refreshMarks();
       close();
       return;
     }
-    if (e.target.closest('a.qr-direct-link')) {
-      // Allow link click to open normally
+    if (e.target.closest('a.qr-direct-link') || e.target.closest('.qrbig-edit')) {
       return;
     }
     if (e.target === box) {

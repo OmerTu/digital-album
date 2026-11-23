@@ -43,12 +43,27 @@ def main() -> None:
                 newest, when = val, t
     if newest is None:
         sys.exit("No marks found — ask for the 'Copy my marks' text instead.")
-    rep = {int(n): int(m["with"]) for n, m in newest.items() if m["kind"] == "replace" and m.get("with")}
-    rem = [int(n) for n, m in newest.items() if m["kind"] == "replace" and not m.get("with")]
-    swaps = [(int(n), int(m["with"])) for n, m in newest.items() if m["kind"] == "swap"]
-    add = [int(n) for n, m in newest.items() if m["kind"] == "add"]
-    notes = {int(n): m["note"] for n, m in newest.items() if m.get("note")}
-    print(f"{len(newest)} marks\nREPLACE = {rep}\nREMOVE (no replacement) = {rem}\nSWAPS = {swaps}\nADD_BACK = {add}\nNOTES = {notes}")
+    rep = {int(n): int(m["with"]) for n, m in newest.items() if not m.get("is_qr") and m.get("kind") == "replace" and m.get("with")}
+    rem = [int(n) for n, m in newest.items() if not m.get("is_qr") and m.get("kind") == "replace" and not m.get("with")]
+    swaps = [(int(n), int(m["with"])) for n, m in newest.items() if not m.get("is_qr") and m.get("kind") == "swap"]
+    add = [int(n) for n, m in newest.items() if not m.get("is_qr") and m.get("kind") == "add"]
+    starred = [int(n) for n, m in newest.items() if not m.get("is_qr") and m.get("kind") == "star"]
+    questions = {int(n): m.get("note", "") for n, m in newest.items() if not m.get("is_qr") and m.get("kind") == "question"}
+    notes = {int(n): m["note"] for n, m in newest.items() if not m.get("is_qr") and m.get("note")}
+    video_titles = {int(n): m["qr_title"] for n, m in newest.items() if not m.get("is_qr") and "qr_title" in m}
+    qr_titles = {n: {"page": m.get("qr_page"), "title": m["qr_title"]} for n, m in newest.items() if m.get("is_qr") and "qr_title" in m}
+    print(
+        f"{len(newest)} marks\n"
+        f"REPLACE = {rep}\n"
+        f"REMOVE (no replacement) = {rem}\n"
+        f"SWAPS = {swaps}\n"
+        f"ADD_BACK = {add}\n"
+        f"STARRED = {starred}\n"
+        f"QUESTIONS = {questions}\n"
+        f"NOTES = {notes}\n"
+        f"VIDEO_TITLES = {video_titles}"
+        + (f"\nQR_TITLES = {qr_titles}" if qr_titles else "")
+    )
 
 
 if __name__ == "__main__":
