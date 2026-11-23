@@ -20,6 +20,22 @@ try:
     from album_config import EXTRA_TUNE  # {photo#: {"shadows": 0-120, optional "bright"/"contrast"/"sat" overrides}} from review
 except ImportError:
     EXTRA_TUNE = {}
+try:
+    from album_config import APPROVED_CROPS  # ONLY crops explicitly approved by the user (never SUGGESTED_CROPS!)
+except ImportError:
+    APPROVED_CROPS = {}
+
+
+def _crop_box(val) -> tuple[float, float, float, float] | None:
+    if not val:
+        return None
+    box = val.get("box") if isinstance(val, dict) else val
+    if not isinstance(box, (list, tuple)) or len(box) != 4:
+        return None
+    x0, y0, x1, y1 = (float(v) for v in box)
+    if 0.0 <= x0 < x1 <= 1.0 and 0.0 <= y0 < y1 <= 1.0 and (x1 - x0) >= 0.05 and (y1 - y0) >= 0.05:
+        return (x0, y0, x1, y1)
+    return None
 
 
 def lift_shadows(im: Image.Image, amount: float, region: tuple | None = None) -> Image.Image:
@@ -67,6 +83,11 @@ def tune(p: dict, src: str) -> str:
     extra = EXTRA_TUNE.get(p["n"], {})
     if extra.get("rotate"):  # straighten (degrees, + = counter-clockwise), then trim the tilted edges, same aspect
         im = level(im, extra["rotate"])
+    crop = _crop_box(APPROVED_CROPS.get(p["n"]) or p.get("approved_crop"))
+    if crop:  # apply ONLY user-approved crops (never SUGGESTED_CROPS)
+        x0, y0, x1, y1 = crop
+        w, h = im.size
+        im = im.crop((round(x0 * w), round(y0 * h), round(x1 * w), round(y1 * h)))
     t = {**p["tune"], **{k: v for k, v in extra.items() if k in ("bright", "contrast", "sat")}}  # review overrides
     if extra.get("shadows"):  # lift shade first, so the contrast step doesn't push faces back down
         im = lift_shadows(im, extra["shadows"], extra.get("region"))

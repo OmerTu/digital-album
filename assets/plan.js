@@ -1,4 +1,5 @@
 const src = n => 'data:image/jpeg;base64,' + I[n];
+const cropSrc = n => (typeof CROP_IMGS !== 'undefined' && CROP_IMGS[n]) ? ('data:image/jpeg;base64,' + CROP_IMGS[n]) : src(n);
 const filt = t => `brightness(${1 + t.bright / 100}) contrast(${1 + t.contrast / 100}) saturate(${1 + t.sat / 100})`;
 const escAttr = s => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const hasOwn = (obj, k) => !!obj && Object.prototype.hasOwnProperty.call(obj, k);
@@ -7,6 +8,53 @@ let M = {};
 try { M = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { M = {}; }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(M)); } catch (e) {} refreshMarks(); };
 const isHebrew = (document.documentElement.lang === 'he') || (typeof LANG !== 'undefined' && LANG === 'he') || document.dir === 'rtl';
+
+function cleanupMark(n) {
+  n = String(n);
+  const m = M[n];
+  if (!m) return;
+  if (!m.kind && !m.note && !hasOwn(m, 'qr_title') && !m.crop && !m.crop_note) {
+    delete M[n];
+  }
+}
+
+function getCropDecision(n) {
+  n = String(n);
+  return (M[n] && M[n].crop) || '';
+}
+
+function cropChipLabel(dec) {
+  if (dec === 'approve') return isHebrew ? '✓ חיתוך אושר' : '✓ Crop approved';
+  if (dec === 'decline') return isHebrew ? '✕ נשמר מקורי' : '✕ Keep original';
+  return isHebrew ? '✂ הצעת חיתוך' : '✂ Suggested crop';
+}
+
+function setCropDecision(n, decision) {
+  n = String(n);
+  if (!decision) {
+    if (M[n]) {
+      delete M[n].crop;
+      cleanupMark(n);
+    }
+  } else {
+    M[n] = { ...(M[n] || {}), kind: (M[n] && M[n].kind) || '', crop: decision };
+  }
+  save();
+}
+
+function setCropNote(n, rawNote) {
+  n = String(n);
+  const trimmed = String(rawNote || '').trim();
+  if (!trimmed) {
+    if (M[n]) {
+      delete M[n].crop_note;
+      cleanupMark(n);
+    }
+  } else {
+    M[n] = { ...(M[n] || {}), kind: (M[n] && M[n].kind) || '', crop_note: trimmed };
+  }
+  save();
+}
 
 function findVideo(n) {
   return (typeof V !== 'undefined' && Array.isArray(V)) ? V.find(x => String(x.n) === String(n)) : null;
@@ -90,7 +138,10 @@ document.querySelectorAll('.ph').forEach(el => {
   el.style.backgroundImage = `url(${src(n)})`;
   el.style.setProperty('--f', filt(D[n].t));
   el.onclick = e => {
-    if (e.target.closest('.mk')) {
+    if (e.target.closest('.crop-chip')) {
+      e.stopPropagation();
+      openCropModal(n);
+    } else if (e.target.closest('.mk')) {
       e.stopPropagation();
       toggle(n, 'replace');
     } else if (e.target.closest('.mk-q')) {
@@ -118,10 +169,14 @@ Object.values(D).sort((a, b) => a.o - b.o).forEach(p => {
 
   const starBtn = !p.k ? `<button type="button" class="pc-btn star" title="${isHebrew ? 'סמן בכוכב (★)' : 'Star photo (★)'}">★</button>` : '';
   const zoomBtn = `<button type="button" class="pc-btn zoom" title="${isHebrew ? 'הגדל תמונה (איכות גבוהה) 🔍' : 'Enlarge photo (high-res) 🔍'}">🔍</button>`;
+  const cropChip = p.scrop
+    ? `<button type="button" class="crop-chip" data-n="${p.n}" title="${escAttr(p.scrop.reason || (isHebrew ? 'לחץ להשוואת לפני/אחרי ולאישור חיתוך' : 'Click to compare Before/After and approve crop'))}">${cropChipLabel(getCropDecision(p.n))}</button>`
+    : '';
 
   c.innerHTML = `
     <div class="img" style="background-image:url(${src(p.n)})">
       <i>${p.n}</i>
+      ${cropChip}
       <div class="pc-acts">${starBtn}${zoomBtn}</div>
     </div>
     <div class="body">
@@ -134,7 +189,10 @@ Object.values(D).sort((a, b) => a.o - b.o).forEach(p => {
 
   c.querySelector('.img').style.setProperty('--f', filt(p.t));
   c.querySelector('.img').onclick = e => {
-    if (e.target.closest('.pc-btn.star')) {
+    if (e.target.closest('.crop-chip')) {
+      e.stopPropagation();
+      openCropModal(p.n);
+    } else if (e.target.closest('.pc-btn.star')) {
       e.stopPropagation();
       toggle(p.n, 'star');
     } else if (e.target.closest('.pc-btn.zoom')) {
@@ -150,12 +208,9 @@ Object.values(D).sort((a, b) => a.o - b.o).forEach(p => {
 function toggle(n, kind) {
   n = String(n);
   if (M[n] && M[n].kind === kind) {
-    if (hasOwn(M[n], 'qr_title')) {
-      M[n].kind = '';
-      M[n].with = '';
-    } else {
-      delete M[n];
-    }
+    M[n].kind = '';
+    M[n].with = '';
+    cleanupMark(n);
   } else {
     M[n] = { ...(M[n] || {}), kind, note: (M[n] && M[n].note) || '', with: (M[n] && M[n].with) || '' };
   }
@@ -165,38 +220,68 @@ function toggle(n, kind) {
 function refreshMarks() {
   document.querySelectorAll('.ph').forEach(el => {
     const n = el.dataset.n;
+    const p = D[n];
     const m = M[n];
     const isRep = m && m.kind === 'replace';
     const isSwap = m && m.kind === 'swap';
     const isQ = m && m.kind === 'question';
+    const cdec = getCropDecision(n);
     el.classList.toggle('marked', isRep || isSwap);
     el.classList.toggle('marked-q', isQ);
     const qb = el.querySelector('.q-badge');
     if (qb) qb.style.display = isQ ? 'flex' : 'none';
     el.dataset.with = m && m.with ? (m.kind === 'swap' ? ` ↔ #${m.with}` : ` ← #${m.with}`) : '';
+    if (p && p.scrop) {
+      const approved = cdec === 'approve';
+      el.classList.toggle('crop-approved', approved);
+      el.style.backgroundImage = `url(${approved ? cropSrc(n) : src(n)})`;
+      const chip = el.querySelector('.crop-chip');
+      if (chip) {
+        chip.classList.toggle('approved', approved);
+        chip.classList.toggle('declined', cdec === 'decline');
+        chip.textContent = cropChipLabel(cdec);
+      }
+    }
   });
 
   grid.querySelectorAll('.pc').forEach(c => {
     const n = c.dataset.n;
+    const p = D[n];
     const m = M[n];
     const isRep = m && m.kind === 'replace';
     const isSwap = m && m.kind === 'swap';
     const isAdd = m && m.kind === 'add';
     const isStar = m && m.kind === 'star';
     const isQ = m && m.kind === 'question';
+    const cdec = getCropDecision(n);
 
     c.classList.toggle('marked', isRep || isSwap || isAdd);
     c.classList.toggle('starred', isStar);
     c.classList.toggle('marked-q', isQ);
 
+    if (p && p.scrop) {
+      const approved = cdec === 'approve';
+      const imgEl = c.querySelector('.img');
+      if (imgEl) imgEl.style.backgroundImage = `url(${approved ? cropSrc(n) : src(n)})`;
+      const chip = c.querySelector('.crop-chip');
+      if (chip) {
+        chip.classList.toggle('approved', approved);
+        chip.classList.toggle('declined', cdec === 'decline');
+        chip.textContent = cropChipLabel(cdec);
+      }
+    }
+
     const mkl = c.querySelector('.mkl');
     if (mkl) {
-      if (isRep) mkl.innerHTML = `· <span class="st m">REPLACE${m.with ? ' WITH #' + m.with : ''}</span>`;
-      else if (isSwap) mkl.innerHTML = `· <span class="st m">SWAP WITH #${m.with}</span>`;
-      else if (isAdd) mkl.innerHTML = `· <span class="st m">MARKED: ADD BACK</span>`;
-      else if (isStar) mkl.innerHTML = `· <span class="st star">★ STARRED</span>`;
-      else if (isQ) mkl.innerHTML = `· <span class="st qmark">? QUESTION</span>`;
-      else mkl.textContent = '';
+      const badges = [];
+      if (isRep) badges.push(`<span class="st m">REPLACE${m.with ? ' WITH #' + m.with : ''}</span>`);
+      else if (isSwap) badges.push(`<span class="st m">SWAP WITH #${m.with}</span>`);
+      else if (isAdd) badges.push('<span class="st m">MARKED: ADD BACK</span>');
+      else if (isStar) badges.push('<span class="st star">★ STARRED</span>');
+      else if (isQ) badges.push('<span class="st qmark">? QUESTION</span>');
+      if (cdec === 'approve') badges.push(`<span class="st crop-ok">${isHebrew ? '✂ חיתוך אושר' : '✂ CROP APPROVED'}</span>`);
+      else if (cdec === 'decline') badges.push(`<span class="st crop-no">${isHebrew ? '✂ ללא חיתוך' : '✂ KEEP ORIGINAL'}</span>`);
+      mkl.innerHTML = badges.length ? '· ' + badges.join(' · ') : '';
     }
   });
 
@@ -245,6 +330,8 @@ function refreshMarks() {
   const q = Object.values(M).filter(m => m.kind === 'question').length;
   const s = Object.values(M).filter(m => m.kind === 'star').length;
   const t = Object.values(M).filter(m => hasOwn(m, 'qr_title')).length;
+  const ca = Object.values(M).filter(m => m.crop === 'approve').length;
+  const cd = Object.values(M).filter(m => m.crop === 'decline').length;
 
   const parts = [];
   if (r) parts.push(`Replace: ${r}`);
@@ -252,17 +339,29 @@ function refreshMarks() {
   if (a) parts.push(`Add back: ${a}`);
   if (q) parts.push(`Questions (?): ${q}`);
   if (s) parts.push(`Starred (★): ${s}`);
+  if (ca) parts.push(`Crops approved: ${ca}`);
+  if (cd) parts.push(`Crops declined: ${cd}`);
   if (t) parts.push(`QR titles: ${t}`);
 
   document.getElementById('markcount').textContent = parts.length ? parts.join(' · ') : 'No marks yet';
+  const jumpCropBtn = document.getElementById('jump-crop');
+  if (jumpCropBtn) {
+    const allScrops = Object.values(D).filter(p => p.scrop);
+    const pending = allScrops.filter(p => !getCropDecision(p.n)).length;
+    jumpCropBtn.textContent = pending
+      ? (isHebrew ? `✂ ${pending} הצעות חיתוך ממתינות` : `✂ ${pending} pending crop${pending === 1 ? '' : 's'}`)
+      : (isHebrew ? `✂ כל ${allScrops.length} הצעות החיתוך נבדקו ✓` : `✂ All ${allScrops.length} crops reviewed ✓`);
+  }
   apply();
   if (typeof applyVideoFilters === 'function') applyVideoFilters();
   if (currentZoomN) updateZoomActions(currentZoomN);
+  if (typeof updateCropModalState === 'function' && currentCropN) updateCropModalState(currentCropN);
   if (typeof updateVideoModalMarks === 'function' && currentVidN) updateVideoModalMarks(currentVidN);
 }
 
 function marksText() {
   const photoEntries = [];
+  const cropEntries = [];
   const videoEntries = [];
   const qrEntries = [];
 
@@ -272,9 +371,12 @@ function marksText() {
       qrEntries.push([n, m]);
       return;
     }
+    if (m.crop || m.crop_note) {
+      cropEntries.push([n, m]);
+    }
     const isVid = m.is_video || (typeof V !== 'undefined' && V.some(v => String(v.n) === String(n)));
     if (isVid) {
-      videoEntries.push([n, m]);
+      if (m.kind || m.note || hasOwn(m, 'qr_title')) videoEntries.push([n, m]);
     } else if (m.kind || m.note) {
       photoEntries.push([n, m]);
     }
@@ -297,6 +399,30 @@ function marksText() {
         lines.push(`Star #${n} (candidate)${m.note ? ` — ${m.note}` : ''}`);
       } else {
         lines.push(`Mark #${n}${m.note ? ` — ${m.note}` : ''}`);
+      }
+    });
+  }
+
+  if (cropEntries.length) {
+    if (lines.length) lines.push('');
+    lines.push(isHebrew ? '=== הצעות חיתוך (Crops) ===' : '=== Suggested crops ===');
+    cropEntries.sort((a, b) => ((D[a[0]] && D[a[0]].o) || 0) - ((D[b[0]] && D[b[0]].o) || 0)).forEach(([n, m]) => {
+      const p = D[n] || {};
+      const pgTxt = p.pg ? (isHebrew ? `עמוד ${p.pg}` : `page ${p.pg}`) : (isHebrew ? 'מחוץ לאלבום' : 'out');
+      const boxStr = p.scrop && p.scrop.box ? ` box [${p.scrop.box.join(', ')}]` : '';
+      const noteStr = m.crop_note ? ` — ${m.crop_note}` : '';
+      if (m.crop === 'approve') {
+        lines.push(isHebrew
+          ? `✂ אשר חיתוך לתמונה #${n} (${pgTxt})${boxStr}${noteStr}`
+          : `✂ Approve crop on #${n} (${pgTxt})${boxStr}${noteStr}`);
+      } else if (m.crop === 'decline') {
+        lines.push(isHebrew
+          ? `✂ שמור מקורי (ללא חיתוך) לתמונה #${n} (${pgTxt})${noteStr}`
+          : `✂ Keep original (decline crop) on #${n} (${pgTxt})${noteStr}`);
+      } else if (m.crop_note) {
+        lines.push(isHebrew
+          ? `✂ הערה להצעת חיתוך לתמונה #${n} (${pgTxt})${boxStr}${noteStr}`
+          : `✂ Note on suggested crop for #${n} (${pgTxt})${boxStr}${noteStr}`);
       }
     });
   }
@@ -383,6 +509,8 @@ function show(n) {
       ${p.k ? '' : `<p><b>Why out:</b> ${p.r}</p>`}${p.note ? `<p><b>Note:</b> ${p.note}</p>` : ''}
       ${p.fr ? `<p><b>Frame:</b> ${p.fr}</p>` : ''}
       <p><b>Tuning:</b> ${p.tt}</p>
+      ${p.acrop ? `<p><b>Crop:</b> ${isHebrew ? 'חיתוך מאושר' : 'Approved crop'} [${p.acrop.box.join(', ')}]${p.acrop.reason ? ' — ' + escAttr(p.acrop.reason) : ''}</p>` : ''}
+      ${p.scrop ? `<p><b>${isHebrew ? 'הצעת חיתוך אופציונלית:' : 'Optional suggested crop:'}</b> ${escAttr(p.scrop.reason || '')} <button type="button" id="bcrop" style="background:${getCropDecision(n) === 'approve' ? '#15803d' : '#4f46e5'};color:#fff;margin-inline-start:6px">${cropChipLabel(getCropDecision(n))} · ${isHebrew ? 'לפני / אחרי' : 'Before / After'}</button></p>` : ''}
       <p class="muted">Reviewer hint: ${p.fx || 'none'} · quality ${p.q}/5 · ratio ${p.ar}</p>
       <p class="he muted">${S[p.sec] ? S[p.sec].he : ''}</p>
       <div class="actions">
@@ -407,9 +535,12 @@ function show(n) {
     document.getElementById('bm-star').onclick = () => { toggle(n, 'star'); show(n); };
   }
   document.getElementById('bzoom').onclick = () => { lb.classList.remove('show'); zoomPhoto(n); };
+  if (document.getElementById('bcrop')) {
+    document.getElementById('bcrop').onclick = () => { lb.classList.remove('show'); openCropModal(n); };
+  }
 
   if (p.k) {
-    const setWith = w => { M[n] = { kind: 'replace', with: w ? String(w) : '', note: (M[n] && M[n].note) || '' }; save(); show(n); };
+    const setWith = w => { M[n] = { ...(M[n] || {}), kind: 'replace', with: w ? String(w) : '', note: (M[n] && M[n].note) || '' }; save(); show(n); };
     const secs = Object.keys(S).sort(); const si = secs.indexOf(p.sec);
     const fill = wide => {
       const near = wide ? secs.slice(Math.max(0, si - 1), si + 2) : [p.sec];
@@ -420,14 +551,15 @@ function show(n) {
     fill(false);
     document.getElementById('mates').innerHTML = (p.mt || []).map(x => `<div class="cand ${m && m.kind === 'swap' && m.with == x ? 'sel' : ''}" data-s="${x}" title="${escAttr(D[x].s)}"><img src="${src(x)}" alt="#${x}" style="--f:${filt(D[x].t)}"><i>${x}</i></div>`).join('') || '<span class="muted">This photo is alone on its page.</span>';
     document.querySelectorAll('#mates .cand').forEach(c => c.onclick = () => { const w = c.dataset.s;
-      if (M[n] && M[n].kind === 'swap' && M[n].with === w) delete M[n]; else M[n] = { kind: 'swap', with: w, note: (M[n] && M[n].note) || '' };
+      if (M[n] && M[n].kind === 'swap' && M[n].with === w) { M[n].kind = ''; M[n].with = ''; cleanupMark(n); }
+      else M[n] = { ...(M[n] || {}), kind: 'swap', with: w, note: (M[n] && M[n].note) || '' };
       save(); show(n); });
     document.getElementById('more').onclick = () => fill(true);
     document.getElementById('bw').onchange = e => { const w = e.target.value.trim().replace('#', ''); if (D[w]) setWith(w); };
     const nw = document.getElementById('nowith'); if (nw) nw.onclick = () => setWith('');
   }
   document.getElementById('bc').onclick = () => lb.classList.remove('show');
-  document.getElementById('bn').oninput = e => { if (!M[n]) M[n] = { kind: p.k ? 'replace' : 'add', note: '' }; M[n].note = e.target.value; save(); };
+  document.getElementById('bn').oninput = e => { M[n] = { ...(M[n] || {}), kind: (M[n] && M[n].kind) || (p.k ? 'replace' : 'add'), note: e.target.value }; save(); };
   lb.classList.add('show');
 }
 lb.onclick = e => { if (e.target === lb) lb.classList.remove('show'); };
@@ -502,6 +634,10 @@ function updateZoomActions(n) {
   const actDiv = document.getElementById('photolb-actions');
   if (!actDiv) return;
 
+  const cropBtnHtml = p.scrop
+    ? `<button type="button" class="photolb-btn btn-crop ${getCropDecision(n) === 'approve' ? 'approved btn-active' : ''}" id="z-crop">${cropChipLabel(getCropDecision(n))}</button>`
+    : '';
+
   if (p.k) {
     const isRep = m && m.kind === 'replace';
     const isQ = m && m.kind === 'question';
@@ -512,6 +648,7 @@ function updateZoomActions(n) {
       <button type="button" class="photolb-btn btn-question ${isQ ? 'btn-active' : ''}" id="z-q">
         ${isQ ? (isHebrew ? '✓ מסומן בסימן שאלה (?)' : '✓ Marked with ?') : (isHebrew ? '? סמן בסימן שאלה' : '? Mark with question mark')}
       </button>
+      ${cropBtnHtml}
     `;
     document.getElementById('z-rep').onclick = () => toggle(n, 'replace');
     document.getElementById('z-q').onclick = () => toggle(n, 'question');
@@ -525,9 +662,13 @@ function updateZoomActions(n) {
       <button type="button" class="photolb-btn btn-star ${isStar ? 'btn-active' : ''}" id="z-star">
         ${isStar ? (isHebrew ? '★ מסומן בכוכב' : '★ Starred') : (isHebrew ? '★ סמן בכוכב' : '★ Star photo')}
       </button>
+      ${cropBtnHtml}
     `;
     document.getElementById('z-add').onclick = () => toggle(n, 'add');
     document.getElementById('z-star').onclick = () => toggle(n, 'star');
+  }
+  if (document.getElementById('z-crop')) {
+    document.getElementById('z-crop').onclick = () => { closeZoom(); openCropModal(n); };
   }
 }
 
@@ -553,8 +694,118 @@ document.getElementById('photolb-prev').onclick = prevZoom;
 document.getElementById('photolb-next').onclick = nextZoom;
 photolb.onclick = e => { if (e.target === photolb) closeZoom(); };
 
+// Optional Suggested Crop Before / After Modal
+const croplb = document.getElementById('croplb');
+let currentCropN = null;
+
+function openCropModal(n) {
+  n = String(n);
+  const p = D[n];
+  if (!p || !p.scrop || !croplb) return;
+  currentCropN = n;
+  const sc = p.scrop;
+  const [x0, y0, x1, y1] = sc.box;
+  const pgTxt = p.pg ? (isHebrew ? `עמוד ${p.pg}` : `Page ${p.pg}`) : (isHebrew ? 'מחוץ לאלבום' : 'Out of album');
+
+  document.getElementById('croplb-title').textContent = isHebrew
+    ? `✂ הצעת חיתוך · תמונה #${p.n} (${pgTxt})`
+    : `✂ Suggested crop · Photo #${p.n} (${pgTxt})`;
+  document.getElementById('croplb-reason').textContent = sc.reason
+    ? sc.reason
+    : (isHebrew ? 'חיתוך ממוקד יותר לשיפור הקומפוזיציה' : 'Tighter framing to improve composition');
+
+  const keepW = Math.round((x1 - x0) * 100);
+  const keepH = Math.round((y1 - y0) * 100);
+  document.getElementById('croplb-meta').textContent = isHebrew
+    ? `${p.pl} · שומר ${keepW}% רוחב × ${keepH}% גובה (${sc.w}×${sc.h} px · יחס ${p.ar} → ${sc.ar}) · החיתוך אופציונלי ואינו מופעל ללא אישור`
+    : `${p.pl} · keeps ${keepW}% W × ${keepH}% H (${sc.w}×${sc.h} px · aspect ${p.ar} → ${sc.ar}) · optional — never applied unless approved`;
+
+  const beforeImg = document.getElementById('croplb-before');
+  const afterImg = document.getElementById('croplb-after');
+  const stage = document.getElementById('croplb-stage');
+  const guide = document.getElementById('croplb-guide');
+
+  const sameFilter = document.body.classList.contains('after') ? filt(p.t) : 'none';
+  beforeImg.src = src(n);
+  beforeImg.style.filter = sameFilter;
+  afterImg.src = cropSrc(n);
+  afterImg.style.filter = sameFilter;
+
+  guide.style.left = (x0 * 100) + '%';
+  guide.style.top = (y0 * 100) + '%';
+  guide.style.width = ((x1 - x0) * 100) + '%';
+  guide.style.height = ((y1 - y0) * 100) + '%';
+  stage.classList.remove('no-guide');
+  const gbtn = document.getElementById('croplb-guide-toggle');
+  if (gbtn) gbtn.textContent = isHebrew ? 'הסתר מסגרת' : 'Hide crop frame';
+
+  const noteIn = document.getElementById('croplb-note');
+  if (noteIn) {
+    noteIn.value = (M[n] && M[n].crop_note) || '';
+    noteIn.oninput = e => { setCropNote(n, e.target.value); };
+  }
+
+  updateCropModalState(n);
+  croplb.classList.add('show');
+}
+
+function updateCropModalState(n) {
+  if (!croplb) return;
+  n = String(n);
+  const dec = getCropDecision(n);
+  const appBtn = document.getElementById('croplb-approve');
+  const decBtn = document.getElementById('croplb-decline');
+  const rstBtn = document.getElementById('croplb-reset');
+  if (appBtn) {
+    appBtn.classList.toggle('active', dec === 'approve');
+    appBtn.textContent = dec === 'approve'
+      ? (isHebrew ? '✓ חיתוך מאושר' : '✓ Crop approved')
+      : (isHebrew ? '✓ אשר חיתוך' : '✓ Approve crop');
+    appBtn.onclick = () => { setCropDecision(n, dec === 'approve' ? '' : 'approve'); };
+  }
+  if (decBtn) {
+    decBtn.classList.toggle('active', dec === 'decline');
+    decBtn.textContent = dec === 'decline'
+      ? (isHebrew ? '✕ נשמר מקורי (נבחר)' : '✕ Keep original (selected)')
+      : (isHebrew ? '✕ שמור מקורי (ללא חיתוך)' : '✕ Keep original (no crop)');
+    decBtn.onclick = () => { setCropDecision(n, dec === 'decline' ? '' : 'decline'); };
+  }
+  if (rstBtn) {
+    rstBtn.style.visibility = (dec || (M[n] && M[n].crop_note)) ? 'visible' : 'hidden';
+    rstBtn.onclick = () => {
+      setCropNote(n, '');
+      setCropDecision(n, '');
+      const noteIn = document.getElementById('croplb-note');
+      if (noteIn) noteIn.value = '';
+    };
+  }
+}
+
+function closeCropModal() {
+  if (croplb) croplb.classList.remove('show');
+  currentCropN = null;
+}
+
+if (croplb) {
+  const cClose = document.getElementById('croplb-close');
+  if (cClose) cClose.onclick = closeCropModal;
+  const gToggle = document.getElementById('croplb-guide-toggle');
+  if (gToggle) {
+    gToggle.onclick = () => {
+      const stage = document.getElementById('croplb-stage');
+      const hidden = stage.classList.toggle('no-guide');
+      gToggle.textContent = hidden
+        ? (isHebrew ? 'הצג מסגרת' : 'Show crop frame')
+        : (isHebrew ? 'הסתר מסגרת' : 'Hide crop frame');
+    };
+  }
+  croplb.addEventListener('click', e => { if (e.target === croplb) closeCropModal(); });
+}
+
 document.addEventListener('keydown', e => {
-  if (photolb.classList.contains('show')) {
+  if (croplb && croplb.classList.contains('show')) {
+    if (e.key === 'Escape') closeCropModal();
+  } else if (photolb.classList.contains('show')) {
     if (e.key === 'Escape') closeZoom();
     else if (e.key === 'ArrowLeft') prevZoom();
     else if (e.key === 'ArrowRight') nextZoom();
@@ -571,7 +822,7 @@ const syncBa = () => {
     ba.classList.toggle('on', isAfter);
   }
 };
-// Show tuned ("after effects") photos by default
+// Show tuned ("after effects") photos by default (never auto-applies suggested crops)
 document.body.classList.add('after');
 syncBa();
 if (ba) {
@@ -581,6 +832,35 @@ if (ba) {
     if (currentZoomN) {
       const p = D[currentZoomN];
       photolbImg.style.filter = document.body.classList.contains('after') ? filt(p.t) : 'none';
+    }
+    if (currentCropN) {
+      const p = D[currentCropN];
+      const f = document.body.classList.contains('after') ? filt(p.t) : 'none';
+      const bImg = document.getElementById('croplb-before');
+      const aImg = document.getElementById('croplb-after');
+      if (bImg) bImg.style.filter = f;
+      if (aImg) aImg.style.filter = f;
+    }
+  };
+}
+
+let jumpCropIdx = 0;
+const jumpCropBtnEl = document.getElementById('jump-crop');
+if (jumpCropBtnEl) {
+  jumpCropBtnEl.onclick = () => {
+    const spreadChips = [...document.querySelectorAll('#spreads .crop-chip')];
+    const pendingChips = spreadChips.filter(el => !getCropDecision(el.dataset.n));
+    const pool = pendingChips.length ? pendingChips : spreadChips;
+    if (pool.length) {
+      const target = pool[jumpCropIdx % pool.length];
+      jumpCropIdx += 1;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      const idxBtn = document.querySelector('button.f[data-f="crop"]');
+      if (idxBtn) {
+        idxBtn.click();
+        document.getElementById('index').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 }
@@ -596,10 +876,11 @@ function apply() {
       || (mode === 'out' && !p.k && !p.sc)
       || (mode === 'cut' && p.sc)
       || (mode === 'hero' && p.h)
+      || (mode === 'crop' && !!p.scrop)
       || (mode === 'star' && m && m.kind === 'star')
       || (mode === 'question' && m && m.kind === 'question')
-      || (mode === 'marked' && !!(m && (m.kind || m.note)));
-    const okq = !q || String(p.n) === q || (p.pl + ' ' + p.s + ' ' + p.r).toLowerCase().includes(q);
+      || (mode === 'marked' && !!(m && (m.kind || m.note || m.crop || m.crop_note)));
+    const okq = !q || String(p.n) === q || (p.pl + ' ' + p.s + ' ' + p.r + ' ' + ((p.scrop && p.scrop.reason) || '')).toLowerCase().includes(q);
     c.style.display = okm && okq ? '' : 'none';
   });
 }

@@ -16,7 +16,8 @@ These rules came from many review rounds on real albums that printed perfectly. 
 ## Layout & Limits
 - **Maximum 5 photos per page**: Strictly enforced across all single pages and merged double-page spreads. A page with 6+ photos looks cluttered and cheap; keeping 2–5 photos per page guarantees generous sizing and readability.
 - **Explicit Section Photo Chunks (`PAGE_CHUNKS`)**: For fine-tuned control over which photos appear on each page of a section, configure `PAGE_CHUNKS: dict[str, list[list[int]]]`.
-- **Never crop.** Each frame keeps the photo's own shape. Portrait stays portrait, 16:9 stays 16:9. Only exception: up to 5% trim off one side to close a wide gap.
+- **Never crop silently.** Each frame keeps the photo's own shape (portrait stays portrait, 16:9 stays 16:9; at most 5% trim off one side to close a wide gap).
+  - **Optional suggested crops (`SUGGESTED_CROPS` → `APPROVED_CROPS`):** When cropping a photo would genuinely make it **much better** (e.g., removing distracting edge clutter/photobombers or bringing distant family closer), propose it in `SUGGESTED_CROPS` (normalized `(x0, y0, x1, y1)` + short reason). Unlike print tuning (`bright`/`contrast`/`sat`), suggested crops are **strictly opt-in** — never auto-applied to layouts or print files. They render as a clickable **"✂ Suggested crop"** chip in `album-plan.html` with a Before/After view; only after the user explicitly approves a crop do we move it into `APPROVED_CROPS`, which then reshapes the frame to the approved crop's exact aspect ratio and crops the original in `prepare_originals.py`.
 - A full-page or double-page photo every 5–7 pages (big landscapes, strong family photos). It keeps its shape, framed cleanly on the page.
 - Every photo gets a number and a visible preview. Every left-out photo gets a reason. Show counts: candidates / kept / out / cut for space.
 - A page can be left partly empty on purpose for handwriting or clean negative space.

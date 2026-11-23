@@ -39,6 +39,8 @@ ORDER_BEFORE: dict[int, int] = {}
 FILL_PICKS: list[int] = []
 LOCK_FILE = ""  # e.g. "plan_locked.json": keep the reviewed photo set and full pages; only marks change them  # {a: b}: photo a goes right before photo b in the book (story order beats camera time)
 SPREAD_ASPECT = 2.4  # wider than this -> double-page spread
+SUGGESTED_CROPS: dict[int, Any] = {}  # optional per-photo crop proposals (never auto-applied; opt-in via planner chip)
+APPROVED_CROPS: dict[int, Any] = {}  # crops explicitly approved by the user (applied to layout & print originals)
 
 import os, sys  # noqa: E401
 sys.path.insert(0, os.getcwd())
@@ -140,15 +142,50 @@ def page_split(items: list[dict[str, Any]], per_max: int | None = None) -> list[
     return out
 
 
+def norm_crop(val: Any) -> dict[str, Any] | None:
+    """Validate normalized crop box (x0, y0, x1, y1) in 0..1; accepts tuple/list or {'box': ..., 'reason': ...}."""
+    if not val:
+        return None
+    if isinstance(val, dict):
+        box = val.get("box")
+        reason = str(val.get("reason") or "").strip()
+    elif isinstance(val, (list, tuple)) and len(val) == 4:
+        box, reason = val, ""
+    else:
+        return None
+    if not isinstance(box, (list, tuple)) or len(box) != 4:
+        return None
+    x0, y0, x1, y1 = (round(float(v), 4) for v in box)
+    if not (0.0 <= x0 < x1 <= 1.0 and 0.0 <= y0 < y1 <= 1.0):
+        return None
+    if (x1 - x0) < 0.05 or (y1 - y0) < 0.05:
+        return None
+    return {"box": [x0, y0, x1, y1], "reason": reason}
+
+
 def build() -> dict[str, Any]:
     """Build the whole plan."""
     rows, notes = load()
+    sug_crops = {int(k): v for k, v in (globals().get("SUGGESTED_CROPS") or {}).items() if str(k).lstrip("-").isdigit()}
+    app_crops = {int(k): v for k, v in (globals().get("APPROVED_CROPS") or {}).items() if str(k).lstrip("-").isdigit()}
     for r in rows:
         r["cts"] = corrected_ts(r)
         nt = notes[r["n"]]
         r.update({k: nt[k] for k in ["place", "scene", "people", "quality", "reason", "fix"]})
         r["keep"] = nt["verdict"] == "keep"
         r["hero"] = bool(nt["hero"]) and r["keep"]
+        r["orig_w"], r["orig_h"] = r["w"], r["h"]
+        ac = norm_crop(app_crops.get(r["n"]))
+        if ac:
+            x0, y0, x1, y1 = ac["box"]
+            r["approved_crop"] = ac
+            r["w"] = max(1, round(r["orig_w"] * (x1 - x0)))
+            r["h"] = max(1, round(r["orig_h"] * (y1 - y0)))
+            r["orient"] = "L" if r["w"] >= r["h"] else "P"
+        sc = norm_crop(sug_crops.get(r["n"]) or nt.get("suggested_crop"))
+        if sc and (not ac or sc["box"] != ac["box"]):
+            # Strictly optional proposal — never changes w/h/aspect/orient until user approves it
+            r["suggested_crop"] = sc
         r["aspect"] = max(r["w"], r["h"]) / min(r["w"], r["h"])
         r["tune"] = tuning(r, nt["fix"])
         r["out_reason"] = "" if r["keep"] else nt["reason"]

@@ -52,6 +52,9 @@ def main() -> None:
     notes = {int(n): m["note"] for n, m in newest.items() if not m.get("is_qr") and m.get("note")}
     video_titles = {int(n): m["qr_title"] for n, m in newest.items() if not m.get("is_qr") and "qr_title" in m}
     qr_titles = {n: {"page": m.get("qr_page"), "title": m["qr_title"]} for n, m in newest.items() if m.get("is_qr") and "qr_title" in m}
+    crop_approved = [int(n) for n, m in newest.items() if not m.get("is_qr") and m.get("crop") == "approve"]
+    crop_declined = [int(n) for n, m in newest.items() if not m.get("is_qr") and m.get("crop") == "decline"]
+    crop_notes = {int(n): m["crop_note"] for n, m in newest.items() if not m.get("is_qr") and m.get("crop_note")}
     print(
         f"{len(newest)} marks\n"
         f"REPLACE = {rep}\n"
@@ -61,6 +64,9 @@ def main() -> None:
         f"STARRED = {starred}\n"
         f"QUESTIONS = {questions}\n"
         f"NOTES = {notes}\n"
+        f"CROP_APPROVED = {crop_approved}\n"
+        f"CROP_DECLINED = {crop_declined}\n"
+        f"CROP_NOTES = {crop_notes}\n"
         f"VIDEO_TITLES = {video_titles}"
         + (f"\nQR_TITLES = {qr_titles}" if qr_titles else "")
     )

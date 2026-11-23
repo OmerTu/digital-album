@@ -100,6 +100,20 @@ STORE_KEY = "album-marks-r1"  # change every review round, so old marks don't co
 # photo -> extra fixes: "shadows" 0-160 (+ "region" x0,y0,x1,y1), "bright"/"contrast"/"sat" %, "rotate" degrees
 EXTRA_TUNE: dict[int, dict] = {}
 
+# ---- optional suggested crops (strictly opt-in — NEVER auto-applied like tuning) ---------------------------
+# SUGGESTED_CROPS: photos where cropping would make the photo much better. Never applied automatically;
+# shown as a clickable "Suggested crop" chip in album-plan.html with a Before/After view so the user can
+# approve or decline each crop individually.
+# box = (x0, y0, x1, y1) as fractions 0..1 of the full photo.
+SUGGESTED_CROPS: dict[int, dict] = {
+    # 42: {"box": (0.12, 0.08, 0.88, 0.92), "reason": "Remove empty space on the edges and bring the family closer"},
+}
+# APPROVED_CROPS: crops explicitly APPROVED by the user. Only entries here reshape the frame in layout_pages.py
+# and crop the print original in prepare_originals.py. Accepts (x0, y0, x1, y1) or {"box": (...), "reason": "..."}.
+APPROVED_CROPS: dict[int, tuple | dict] = {
+    # 42: (0.12, 0.08, 0.88, 0.92),
+}
+
 # ---- page headers & layout ---------------------------------------------------------------------------------
 HIDDEN_TITLES: dict[int, list[str]] = {}  # plan page no -> sections whose header is removed
 EXTRA_TITLES: dict[int, str] = {}  # plan page no -> extra header text

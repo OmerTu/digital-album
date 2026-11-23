@@ -24,8 +24,12 @@ Rules (family album — memories matter as much as quality): keep about 55–65%
 name the kept one; out = blurry, badly exposed, accidental, documents/screenshots/receipts, weak repetitive
 scenery, mundane. Keep RV/home-on-wheels life moments. Judge duplicates within your chunk only.
 
-Write a JSON array to <ALBUM FOLDER>/notes/part<PART>.json with exactly the keys n, place, scene, people, quality,
-verdict, reason, hero, fix — every number once. Validate with python. Change no other files.
+Write a JSON array to <ALBUM FOLDER>/notes/part<PART>.json with keys n, place, scene, people, quality,
+verdict, reason, hero, fix — every number once. Only when cropping a kept/strong photo would make it **much** better
+(e.g. distracting clutter/stranger at an edge, or subject lost in huge dead space — never minor tweaks), also add an
+optional `"suggested_crop": {"box": [x0, y0, x1, y1], "reason": "short why"}` (fractions 0..1 after inspecting
+thumbs/NNN.jpg). Never auto-crop; this only surfaces an opt-in suggestion chip for the user to approve. Validate with
+python. Change no other files.
 Final reply: 5-10 lines — places in order with number ranges, keep/out counts, hero numbers, anything odd
 (e.g. a camera whose times look wrong).
 """

@@ -9,6 +9,7 @@ An end-to-end skill for **Google Antigravity** that turns a shared Google Photos
 - **Google Photos Extraction**: Automatically pulls all items, separates photos and videos, and detects video durations and direct share links.
 - **Interactive Album Plan (`album-plan.html`)**:
   - **Spread & Page Layouts**: Enforces high-standard design rules (clean white backgrounds, max 5 photos per page, proper margins), defaults to the **After tuning** enhanced photo view (with Before/After toggle), and keeps photo action buttons hidden until hovering over a photo.
+  - **Opt-In Suggested Crops (`✂ Suggested crop` chip)**: For photos where cropping would dramatically improve framing, shows a clickable chip that opens a Before/After crop comparison modal with an exact crop-frame overlay — strictly optional and never auto-applied until you explicitly approve it.
   - **Full-Screen Lightbox**: Click any photo to view full resolution.
   - **Enlarged QR Codes with Direct Browser Link & Inline Title Edit**: Clicking any QR code (or its label) opens an enlarged card with a one-click browser link and inline title editor that previews live next to the QR code.
   - **Dedicated Video Gallery (`#videos`)**: Review all trip videos (both placed in the album and unplaced), search by place/title, play directly, set a custom title for each video (added next to its QR code via `VIDEO_TITLES`), and mark favorites (★) or questions (?).

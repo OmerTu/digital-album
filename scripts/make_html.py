@@ -43,6 +43,8 @@ TEXT_HALF: dict = {}
 QR_CODES: list = []
 VIDEO_TITLES: dict[int, str] = {}
 EXTRA_TUNE: dict[int, dict] = {}
+SUGGESTED_CROPS: dict[int, Any] = {}
+APPROVED_CROPS: dict[int, Any] = {}
 THEMES: list = []
 THEME_NOTE = ""
 EDITOR_OFFSET = None
@@ -58,9 +60,13 @@ _ed_off = EDITOR_OFFSET if EDITOR_OFFSET is not None else LUPA_OFFSET
 OFF = _ed_off if _ed_off is not None else (0 if _comp_lower == "picabook" else (1 if (COVER_ONLY and OPENING_TEXT_HE) else 0))
 
 
-def img_b64(path: str, size: int, quality: int = 72) -> str:
-    """JPEG preview as base64."""
+def img_b64(path: str, size: int, quality: int = 72, crop_box: list[float] | tuple | None = None) -> str:
+    """JPEG preview as base64 (optionally cropped to normalized (x0, y0, x1, y1))."""
     im = Image.open(path).convert("RGB")
+    if crop_box:
+        x0, y0, x1, y1 = (float(v) for v in crop_box)
+        w, h = im.size
+        im = im.crop((round(x0 * w), round(y0 * h), round(x1 * w), round(y1 * h)))
     im.thumbnail((size, size))
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=quality)
@@ -130,6 +136,42 @@ VIDEO_TITLES_NORM: dict[int, str] = {
 _EXTRA_TUNE_MAP: dict[int, dict] = globals().get("EXTRA_TUNE") or {}
 
 
+def norm_crop(val: Any) -> dict[str, Any] | None:
+    """Validate normalized crop box (x0, y0, x1, y1) in 0..1."""
+    if not val:
+        return None
+    if isinstance(val, dict):
+        box = val.get("box")
+        reason = str(val.get("reason") or "").strip()
+    elif isinstance(val, (list, tuple)) and len(val) == 4:
+        box, reason = val, ""
+    else:
+        return None
+    if not isinstance(box, (list, tuple)) or len(box) != 4:
+        return None
+    x0, y0, x1, y1 = (round(float(v), 4) for v in box)
+    if not (0.0 <= x0 < x1 <= 1.0 and 0.0 <= y0 < y1 <= 1.0):
+        return None
+    if (x1 - x0) < 0.05 or (y1 - y0) < 0.05:
+        return None
+    return {"box": [x0, y0, x1, y1], "reason": reason}
+
+
+SUGGESTED_CROPS_NORM: dict[int, dict[str, Any]] = {}
+for _k, _v in (globals().get("SUGGESTED_CROPS") or {}).items():
+    if str(_k).lstrip("-").isdigit():
+        _nc = norm_crop(_v)
+        if _nc:
+            SUGGESTED_CROPS_NORM[int(_k)] = _nc
+
+APPROVED_CROPS_NORM: dict[int, dict[str, Any]] = {}
+for _k, _v in (globals().get("APPROVED_CROPS") or {}).items():
+    if str(_k).lstrip("-").isdigit():
+        _nc = norm_crop(_v)
+        if _nc:
+            APPROVED_CROPS_NORM[int(_k)] = _nc
+
+
 def effective_tune(p: dict[str, Any]) -> dict[str, Any]:
     """Merge per-photo EXTRA_TUNE overrides (bright/contrast/sat) so the HTML After view matches print files."""
     ex = _EXTRA_TUNE_MAP.get(p["n"], {})
@@ -163,8 +205,32 @@ for i, pg in enumerate(PAGES):
         mates.setdefault(n, [])
         mates[n] += [m for m in group if m != n and m not in mates[n]]
 data = {}
+pending_scrops: dict[int, dict[str, Any]] = {}
+applied_acrops: dict[int, dict[str, Any]] = {}
 for p in photos:
     _t = effective_tune(p)
+    _ac = APPROVED_CROPS_NORM.get(p["n"]) or norm_crop(p.get("approved_crop"))
+    _sc = SUGGESTED_CROPS_NORM.get(p["n"]) or norm_crop(p.get("suggested_crop"))
+    if _ac:
+        applied_acrops[p["n"]] = _ac
+        if _sc and _sc["box"] == _ac["box"]:
+            _sc = None
+    _sc_info = None
+    if _sc:
+        x0, y0, x1, y1 = _sc["box"]
+        ow = int(p.get("orig_w") or p["w"])
+        oh = int(p.get("orig_h") or p["h"])
+        cw, ch = max(1, round(ow * (x1 - x0))), max(1, round(oh * (y1 - y0)))
+        _sc_info = {
+            "box": _sc["box"],
+            "reason": _sc["reason"],
+            "ar": round(cw / ch, 3),
+            "w": cw,
+            "h": ch,
+            "ow": ow,
+            "oh": oh,
+        }
+        pending_scrops[p["n"]] = _sc_info
     data[str(p["n"])] = {
         "n": p["n"], "o": p["album_order"], "k": p["keep"], "sc": bool(p.get("space_cut")),
         "pl": p["place"], "s": p["scene"], "q": p["quality"], "pg": ("cover" if p["page"] == 0 else p["page"] + OFF if p["page"] else p["page"]), "sec": p["sec"],
@@ -172,6 +238,8 @@ for p in photos:
         "fx": p["fix"], "note": p.get("note", ""), "fr": frames.get(p["n"], ""),
         "h": p["n"] in big, "ar": round(p["w"] / p["h"], 3), "mt": mates.get(p["n"], []),
         "u": p.get("url", ""), "su": p.get("share_url", ""),
+        **({"scrop": _sc_info} if _sc_info else {}),
+        **({"acrop": _ac} if _ac else {}),
     }
 
 # Video Gallery collection
@@ -226,7 +294,20 @@ for p in photos:
 
 in_album_vids = [v for v in video_list if v["in_album"]]
 out_album_vids = [v for v in video_list if not v["in_album"]]
-imgs = {str(p["n"]): img_b64(f"thumbs/{p['n']:03d}.jpg", 600 if p["n"] in big else 360) for p in photos}
+imgs = {
+    str(p["n"]): img_b64(
+        f"thumbs/{p['n']:03d}.jpg",
+        600 if p["n"] in big else 360,
+        crop_box=applied_acrops[p["n"]]["box"] if p["n"] in applied_acrops else None,
+    )
+    for p in photos
+}
+crop_imgs = {}
+for _cn, _sc in pending_scrops.items():
+    _src_path = f"originals/{_cn:03d}.jpg" if os.path.exists(f"originals/{_cn:03d}.jpg") else f"thumbs/{_cn:03d}.jpg"
+    if os.path.exists(_src_path):
+        crop_imgs[str(_cn)] = img_b64(_src_path, 900, 82, crop_box=_sc["box"])
+n_scrops = len(pending_scrops)
 map_img = img_b64("map/route_map.png", 1800, 82) if os.path.exists("map/route_map.png") else ""
 for _i, _n in globals().get("BG_TEXTURES", {}).items():  # spread backgrounds: the sharp print file, not the 600 px thumb
     tex_path = f"ready/upload/texbg_s{_i:02d}_{_n}.jpg"
@@ -335,8 +416,14 @@ def tile(n: int, x: float, y: float, w: float, h: float, total_w: float = PW) ->
                 "<button type='button' class='ph-act-btn mk-q' title='סמן בסימן שאלה (?)'>?</button>"
                 "<button type='button' class='ph-act-btn mk-z' title='הגדל תמונה (איכות גבוהה) 🔍'>🔍</button>"
                 "</span><span class='q-badge' style='display:none'>?</span>")
+    crop_chip = ""
+    if n in pending_scrops and tag:
+        chip_pos = " tr" if "class='tl'" in tag else ""
+        chip_lbl = "✂ הצעת חיתוך" if LANG == "he" else "✂ Suggested crop"
+        chip_tip = escape(pending_scrops[n].get("reason") or ("לחץ להשוואת לפני/אחרי ולאישור חיתוך" if LANG == "he" else "Click to compare Before/After and approve crop"))
+        crop_chip = f"<button type='button' class='crop-chip{chip_pos}' data-n='{n}' title='{chip_tip}'>{chip_lbl}</button>"
     return (f"<div class='ph' data-n='{n}' style='left:{pct(x, total_w)};top:{pct(y, PH_CM)};"
-            f"width:{pct(w, total_w)};height:{pct(h, PH_CM)}'>{tag}{acts}</div>")
+            f"width:{pct(w, total_w)};height:{pct(h, PH_CM)}'>{tag}{crop_chip}{acts}</div>")
 
 
 def pcol(page: str, no) -> str:
@@ -652,6 +739,7 @@ if LANG == "he":
 <li><b>החלפה / הסרה / סימן שאלה:</b> לחצו על <b>✕</b> להחלפה או הסרה, על <b>?</b> לסימון התלבטות, או על התמונה עצמה להחלפת מקומות (Swap) ולהשוואת לפני/אחרי.</li>
 <li><b>סימון תמונות מועמדות בכוכב (★):</b> באינדקס התמונות המלא בתחתית, רחפו על תמונה מחוץ לאלבום ולחצו על <b>★</b> כדי לסמן מועדפות.</li>
 <li><b>הגדלה באיכות מקסימלית (🔍):</b> לחצו על <b>🔍</b> לצפייה במסך מלא באיכות גבוהה ישירות מ-Google Photos (דפדוף עם החצים או Esc).</li>
+<li><b>הצעות חיתוך אופציונליות (✂):</b> על תמונות שחיתוך יכול לשפר משמעותית תופיע תווית <b>✂ הצעת חיתוך</b> (לא מופעלת אוטומטית). לחצו עליה להשוואת לפני/אחרי ובחרו אם לאשר או להשאיר מקורי.</li>
 <li><b>כותרות לסרטונים (ליד קוד ה-QR):</b> בגלריית הסרטונים למטה (או בלחיצה על קוד QR בדף), הקלידו כותרת קצרה לכל סרטון — היא מתעדכנת מיד ליד ה-QR ומתווספת להעתקת הסימונים.</li>
 </ul>
 התמונות מוצגות כברירת מחדל בגרסה המשופרת (<b>After tuning</b>; ניתן להשוות עם <b>Before</b> בסרגל). כל הסימונים והכותרות נשמרים בדפדפן! בסיום, לחצו על <b>Copy my marks</b> בתחתית המסך והדביקו לכאן בהודעה.
@@ -663,6 +751,7 @@ else:
 <li><b>Replace / remove / question / swap:</b> Click <b>✕</b> to replace or remove, <b>?</b> to flag a question, or click the photo to open Before/After comparison and swap places on the page.</li>
 <li><b>Star candidate photos (★):</b> In the Photo Index at the bottom, hover any photo outside the album and click <b>★</b> to bookmark favorites.</li>
 <li><b>Enlarge high-res (🔍):</b> Click <b>🔍</b> to open the fullscreen high-resolution viewer from Google Photos (navigate with arrow keys or Esc).</li>
+<li><b>Optional suggested crops (✂):</b> Photos where a tighter crop would significantly improve framing show a <b>✂ Suggested crop</b> chip (never auto-applied). Click it to compare Before vs After and approve or keep original.</li>
 <li><b>Video QR titles:</b> In the Videos Gallery below (or by clicking any QR code on a page), type a short title for each video — it previews live next to the QR code and exports with your marks.</li>
 </ul>
 Photos are shown in their enhanced (<b>After tuning</b>) view by default (toggle <b>Show: After tuning</b> to compare with Before). All marks &amp; titles are saved in your browser — click <b>Copy my marks</b> at the bottom and paste the list in chat.
@@ -744,6 +833,7 @@ html = f"""<!doctype html>
 <div class="toolbar">
   <button id="ba" class="on">Show: After tuning</button>
   <span class="muted">Jump to page</span><input type="search" id="jump" placeholder="e.g. 48">
+  {f'<button type="button" id="jump-crop" class="btn-crop-jump">✂ {n_scrops} {"הצעות חיתוך" if LANG == "he" else "suggested crops"}</button>' if n_scrops else ''}
   <a class="btn" href="#index">Photo index ↓</a>
   <a class="btn" href="#videos" style="background:#047857;color:#fff">{jump_vids}</a>
 </div>
@@ -757,6 +847,7 @@ html = f"""<!doctype html>
   <button class="f" data-f="out">Out {len(out) - len(space)}</button>
   <button class="f" data-f="cut">Cut for space {len(space)}</button>
   <button class="f" data-f="hero">Full page / spread</button>
+  {f'<button class="f" data-f="crop">✂ {"הצעות חיתוך" if LANG == "he" else "Suggested crops"} ({n_scrops})</button>' if n_scrops else ''}
   <button class="f" data-f="star">★ Starred</button>
   <button class="f" data-f="question">? Questions</button>
   <button class="f" data-f="marked">My marks</button>
@@ -795,12 +886,55 @@ html = f"""<!doctype html>
 
 {videolb_html}
 
+<!-- Optional Suggested Crop Before / After Modal -->
+<div class="croplb" id="croplb">
+  <div class="croplb-card" dir="{'rtl' if LANG == 'he' else 'ltr'}">
+    <div class="croplb-head">
+      <div>
+        <div class="croplb-title" id="croplb-title"></div>
+        <div class="croplb-reason" id="croplb-reason"></div>
+        <div class="croplb-meta muted" id="croplb-meta"></div>
+      </div>
+      <div class="croplb-head-acts">
+        <button type="button" class="croplb-guide-toggle" id="croplb-guide-toggle">{'הסתר מסגרת' if LANG == 'he' else 'Hide crop frame'}</button>
+        <button type="button" class="croplb-close" id="croplb-close" title="Close (Esc)">✕</button>
+      </div>
+    </div>
+    <div class="croplb-cmp">
+      <div class="crop-panel">
+        <div class="crop-panel-lbl">{'לפני · תמונה מקורית' if LANG == 'he' else 'Before · Original'}</div>
+        <div class="crop-canvas-wrap">
+          <div class="crop-stage" id="croplb-stage">
+            <img id="croplb-before" src="" alt="Before crop">
+            <div class="crop-guide" id="croplb-guide"></div>
+          </div>
+        </div>
+      </div>
+      <div class="crop-panel">
+        <div class="crop-panel-lbl crop-after-lbl">{'אחרי · הצעת חיתוך (אופציונלי)' if LANG == 'he' else 'After · Suggested crop (optional)'}</div>
+        <div class="crop-canvas-wrap">
+          <img class="crop-after-img" id="croplb-after" src="" alt="After suggested crop">
+        </div>
+      </div>
+    </div>
+    <div class="croplb-foot">
+      <input type="text" id="croplb-note" dir="auto" placeholder="{'הערה אופציונלית על החיתוך (למשל: לחתוך פחות מלמעלה)...' if LANG == 'he' else 'Optional note on crop (e.g. leave more sky on top)...'}">
+      <div class="croplb-actions">
+        <button type="button" class="croplb-btn approve" id="croplb-approve">{'✓ אשר חיתוך' if LANG == 'he' else '✓ Approve crop'}</button>
+        <button type="button" class="croplb-btn decline" id="croplb-decline">{'✕ שמור מקורי (ללא חיתוך)' if LANG == 'he' else '✕ Keep original (no crop)'}</button>
+        <button type="button" class="croplb-btn reset" id="croplb-reset">{'איפוס' if LANG == 'he' else 'Reset'}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="lb" id="lb"><div class="lbin" id="lbin"></div></div>
 <textarea id="copybox" aria-label="Marks to copy"></textarea>
 <script>
 const STORE_KEY = {json.dumps(STORE_KEY)};
 const D = {json.dumps(data, ensure_ascii=False)};
 const I = {json.dumps(imgs)};
+const CROP_IMGS = {json.dumps(crop_imgs)};
 const S = {json.dumps(SEC, ensure_ascii=False)};
 const V = {json.dumps(video_list, ensure_ascii=False)};
 {JS}
