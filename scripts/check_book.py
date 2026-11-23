@@ -14,11 +14,17 @@ Usage:
 import glob
 import json
 import os
+import re
 import sys
 
 from PIL import Image
 
 sys.path.insert(0, os.getcwd())
+
+
+def is_album_item_share_url(url: str) -> bool:
+    """True for Google Photos album-item links (photos.google.com/share/.../photo/...) that open the main album on Android."""
+    return bool(re.search(r"photos\.google\.com/share/[^/]+/photo/", url or ""))
 
 PX_CM = 300 / 2.54  # editor px per cm (300 dpi)
 QR_MIN = round(2.0 * PX_CM)  # printed QR at least 2 cm (Lupa px)
@@ -153,6 +159,12 @@ def check_picabook(layout_path: str = "ready/picabook_layout.json") -> int:
                 err.append(f"{tag}: QR {q_id} image file missing '{q.get('file')}'")
             elif q.get("mode") == "native" and not q.get("url") and not has_file:
                 err.append(f"{tag}: QR {q_id} has neither a target URL nor a fallback QR image")
+            if is_album_item_share_url(q.get("url", "")):
+                err.append(
+                    f"{tag}: QR {q_id} uses an album-item link ({q.get('url')}), which opens the main album instead of "
+                    f"the video on Android — open the video in Google Photos -> Share -> Create link -> Create link -> "
+                    f"Copy, put the standalone photos.app.goo.gl/... link in VIDEO_LINKS / QR_CODES, and rebuild"
+                )
             if qb[0] < 0.25 or qb[1] < 0.15 or qb[2] > W - 0.25 or qb[3] > H - 0.15:
                 note.append(f"{tag}: QR {q_id} closer than 0.25 cm to trim; check quiet zone")
             for p in non_bleed_photos:
@@ -258,6 +270,20 @@ def check_lupa(layout_path: str = "ready/lupa_layout.json") -> int:
     for n, where in used.items():
         if len(where) > 1:
             err.append(f"#{n} is used twice (spreads {where})")
+    try:
+        import album_config as C
+        vlinks = {int(k): str(v).strip() for k, v in (getattr(C, "VIDEO_LINKS", None) or {}).items() if str(k).lstrip("-").isdigit()}
+        for q_cfg in getattr(C, "QR_CODES", []):
+            vn = q_cfg.get("video_n")
+            q_url = (vlinks.get(int(vn)) if vn is not None and str(vn).lstrip("-").isdigit() else "") or (q_cfg.get("url") or "")
+            if is_album_item_share_url(q_url):
+                err.append(
+                    f"page {q_cfg.get('page')}: QR ({q_cfg.get('title_he') or q_cfg.get('file')}) uses an album-item "
+                    f"link ({q_url}) which opens the main album on Android — use Google Photos Share -> Create link -> "
+                    f"Create link -> Copy to get a standalone photos.app.goo.gl/... link"
+                )
+    except Exception:
+        pass
     print(f"Lupa check: {len(L['spreads'])} spreads checked")
     print("\nPAGE TITLES (read for spelling):\n  " + "\n  ".join(titles) if titles else "")
     if note:

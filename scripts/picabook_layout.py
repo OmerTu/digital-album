@@ -40,6 +40,11 @@ VIDEO_TITLES: dict[int, str] = {
     for k, v in (getattr(C, "VIDEO_TITLES", None) or {}).items()
     if str(k).lstrip("-").isdigit()
 }
+VIDEO_LINKS: dict[int, str] = {
+    int(k): str(v).strip()
+    for k, v in (getattr(C, "VIDEO_LINKS", None) or {}).items()
+    if str(k).lstrip("-").isdigit() and str(v).strip()
+}
 
 SAFE_CM = 0.8  # keep text & QR codes >= 0.8 cm inside outer trim edges
 MAP_FILE = "ready/upload/003_map.jpg"
@@ -60,6 +65,14 @@ def upload_files() -> dict[tuple[int, str], str]:
 
 
 def resolve_qr_url(q: dict[str, Any], photos_by_n: dict[int, dict[str, Any]]) -> str:
+    vn = q.get("video_n")
+    if vn is not None:
+        try:
+            vn_int = int(vn)
+            if vn_int in VIDEO_LINKS:
+                return VIDEO_LINKS[vn_int]
+        except (TypeError, ValueError):
+            pass
     if q.get("url"):
         return q["url"]
     for key in ("file", "src"):

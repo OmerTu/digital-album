@@ -12,7 +12,7 @@ An end-to-end skill for **Google Antigravity** that turns a shared Google Photos
   - **Opt-In Suggested Crops (`✂ Suggested crop` chip)**: For photos where cropping would dramatically improve framing, shows a clickable chip that opens a Before/After crop comparison modal with an exact crop-frame overlay — strictly optional and never auto-applied until you explicitly approve it.
   - **Full-Screen Lightbox**: Click any photo to view full resolution.
   - **Enlarged QR Codes with Direct Browser Link & Inline Title Edit**: Clicking any QR code (or its label) opens an enlarged card with a one-click browser link and inline title editor that previews live next to the QR code.
-  - **Dedicated Video Gallery (`#videos`)**: Review all trip videos (both placed in the album and unplaced), search by place/title, play directly, set a custom title for each video (added next to its QR code via `VIDEO_TITLES`), and mark favorites (★) or questions (?).
+  - **Dedicated Video Gallery (`#videos`)**: Review all trip videos (both placed in the album and unplaced), search by place/title, play directly, set a custom title for each video (added next to its QR code via `VIDEO_TITLES`), mark favorites (★) or questions (?), and upgrade finalized video QR codes to Android-safe standalone `photos.app.goo.gl/...` links (`VIDEO_LINKS`).
   - **Client-Side Review & Markups**: Mark replacement candidates, star favorites, set video/QR titles, and export feedback with "Copy my marks" to paste back to Antigravity.
 - **Itinerary Maps**: Generates route maps with OpenStreetMap support for international trips.
 - **Print Pre-Flight Check**: Checks bleed margins, low-resolution warnings, QR readability, and face occlusions.

@@ -38,6 +38,45 @@ TEAL = getattr(C, "QR_DEFAULT_BG", (255, 255, 255))  # page colour under the cod
 DARK = (28, 45, 42)
 
 
+def is_album_item_url(url: str) -> bool:
+    """True if url is a Google Photos album-item deep link that opens the main album instead of the video on Android."""
+    return bool(re.search(r"photos\.google\.com/share/[^/]+/photo/", url or ""))
+
+
+def decode_qr(path: str) -> str:
+    """Decode QR payload from an image file (or '' if unreadable)."""
+    if not path or not os.path.exists(path):
+        return ""
+    img = cv2.imread(path)
+    if img is None:
+        return ""
+    img = cv2.copyMakeBorder(img, 40, 40, 40, 40, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+    for det in (cv2.QRCodeDetector(), cv2.QRCodeDetectorAruco()):
+        val, _, _ = det.detectAndDecode(img)
+        if val:
+            return val
+    return ""
+
+
+def ensure_src_qr(src: str, target_url: str) -> None:
+    """Rebuild source QR image if missing or if its encoded URL is stale (e.g. updated in VIDEO_LINKS)."""
+    if not target_url:
+        return
+    if os.path.exists(src) and decode_qr(src) == target_url:
+        return
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    import create_qr as CQ
+    os.makedirs(os.path.dirname(src) or ".", exist_ok=True)
+    tile = CQ.round_tile(CQ.build_qr(target_url))
+    jpeg = Image.new("RGB", tile.size, "white")
+    jpeg.paste(tile, mask=tile.getchannel("A"))
+    jpeg.save(src, format="JPEG", quality=96, subsampling=0, optimize=True)
+    if src.lower().endswith((".jpg", ".jpeg")):
+        tile.save(os.path.splitext(src)[0] + ".png")
+
+
 def prepare(src: str, out: str, when: datetime, bg: tuple = TEAL, dark: tuple = DARK) -> str:
     """Write the frameless QR and return what it scans to."""
     # A tinted QR is only safe when its modules remain clearly separated from
@@ -73,11 +112,32 @@ def main() -> None:
     off = getattr(C, "EDITOR_OFFSET", getattr(C, "LUPA_OFFSET", None))
     if off is None:
         off = 0 if str(comp).lower() == "picabook" else 1
+    video_links = {
+        int(k): str(v).strip()
+        for k, v in (getattr(C, "VIDEO_LINKS", None) or {}).items()
+        if str(k).lstrip("-").isdigit() and str(v).strip()
+    }
+    bad_android: list[str] = []
     for k, q in enumerate(getattr(C, "QR_CODES", [])):
-        d = re.search(r"(\d{4})-(\d{2})-(\d{2})", q["src"]).groups()
+        vn = q.get("video_n")
+        target_url = (video_links.get(int(vn)) if vn is not None and str(vn).lstrip("-").isdigit() else "") or (q.get("url") or "").strip()
+        if target_url:
+            ensure_src_qr(q["src"], target_url)
+        m_date = re.search(r"(\d{4})-(\d{2})-(\d{2})", q["src"])
+        d = m_date.groups() if m_date else ("2026", "01", "01")
         when = datetime(int(d[0]), int(d[1]), int(d[2]), 23, 59, q.get("t", 30 + k % 30))  # "t": new second for a re-made file
         url = prepare(q["src"], q["file"], when, tuple(q.get("bg", TEAL)), tuple(q.get("dark", DARK)))  # "dark": darker dots on a dark page
         print(f"{q['file']}  page {q['page'] + off} ({comp})  ->  {url}")
+        if is_album_item_url(url):
+            bad_android.append(f"  page {q['page'] + off} ({q.get('title_he') or q['file']}): {url}")
+    if bad_android:
+        print(
+            "\nWARNING: These QR codes use album-item links (photos.google.com/share/.../photo/...), which open the\n"
+            "main album instead of the video on Android! Once video selection is final, open each video in Google Photos\n"
+            "-> Share -> Create link -> Create link -> Copy, put the standalone photos.app.goo.gl/... link in\n"
+            "VIDEO_LINKS (or QR_CODES['url']) in album_config.py, and re-run make_qr.py:\n"
+            + "\n".join(bad_android)
+        )
 
 
 if __name__ == "__main__":

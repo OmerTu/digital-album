@@ -20,7 +20,7 @@
 - **Video Gallery (`#videos`) at the bottom**:
   - Displays all videos captured during the trip, clearly distinguishing between those **part of the album** (linked via QR code with page number and title) and those **outside the album**.
   - Inline **Title next to QR** input on every video card (and inside `#videolb`) so the user can name any video; edits preview immediately next to matching QR codes on album pages and export via **Copy my marks**.
-  - Hover-only overlay buttons on video thumbnails (`★`, `?`, `▶`), plus direct watch links (`▶ צפה בסרטון ↗`) and `#videolb` modal.
+  - Hover-only overlay buttons on video thumbnails (`★`, `?`, `▶`), plus direct watch links (`▶ צפה בסרטון ↗`) and `#videolb` modal. Once the user finalizes which videos go in the book, update each selected video's link in Google Photos (**Share → Create link → Create link → Copy**) into `VIDEO_LINKS` so QR codes open the specific video on Android as well as iOS/Web.
   - Toolbar filters: All videos, In album (with QR), Outside album, Starred, Questions, My marks (includes videos with edited titles), and real-time search.
 
 ## Interactive Tools and Marks (plan.js)

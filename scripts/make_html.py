@@ -42,6 +42,7 @@ INTRO_TEXT_BOX = True
 TEXT_HALF: dict = {}
 QR_CODES: list = []
 VIDEO_TITLES: dict[int, str] = {}
+VIDEO_LINKS: dict[int, str] = {}
 EXTRA_TUNE: dict[int, dict] = {}
 SUGGESTED_CROPS: dict[int, Any] = {}
 APPROVED_CROPS: dict[int, Any] = {}
@@ -93,8 +94,23 @@ def tune_txt(t: dict) -> str:
     return ", ".join(parts) or "neutral"
 
 
+VIDEO_LINKS_NORM: dict[int, str] = {
+    int(k): str(v).strip()
+    for k, v in (globals().get("VIDEO_LINKS") or {}).items()
+    if str(k).lstrip("-").isdigit() and str(v).strip()
+}
+
+
 def resolve_qr_url(q: dict[str, Any]) -> str:
-    """Resolve destination URL of a QR code: explicit url, decoded from image, or video share_url."""
+    """Resolve destination URL of a QR code: VIDEO_LINKS[video_n], explicit url, decoded image, or fallback share_url."""
+    vn = q.get("video_n")
+    if vn is not None:
+        try:
+            vn_int = int(vn)
+            if vn_int in VIDEO_LINKS_NORM:
+                return VIDEO_LINKS_NORM[vn_int]
+        except (TypeError, ValueError):
+            pass
     if q.get("url"):
         return q["url"]
     for key in ("file", "src"):
@@ -124,7 +140,7 @@ QR_URL_MAP: dict[int, str] = {}
 for _idx, _q in enumerate(QR_CODES):
     _u = resolve_qr_url(_q)
     QR_URL_MAP[_idx] = _u
-    if _u and not _q.get("url"):
+    if _u:
         _q["url"] = _u
 
 
@@ -273,8 +289,8 @@ for p in photos:
     _qr_title = VIDEO_TITLES_NORM.get(p["n"])
     if _qr_title is None:
         _qr_title = resolve_qr_title(_qr_match) if _qr_match else ""
-    _qr_url = _qr_match.get("url", "") if _qr_match else ""
-    _share_url = p.get("share_url") or raw_items_url_map.get(p.get("id")) or _qr_url or p.get("url", "")
+    _qr_url = VIDEO_LINKS_NORM.get(p["n"]) or (_qr_match.get("url", "") if _qr_match else "")
+    _share_url = VIDEO_LINKS_NORM.get(p["n"]) or _qr_url or p.get("share_url") or raw_items_url_map.get(p.get("id")) or p.get("url", "")
 
     video_list.append({
         "n": p["n"],

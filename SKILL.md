@@ -76,12 +76,15 @@ Use Antigravity's built-in Browser Subagent (`/browser`) or Chrome DevTools / Pl
 - **Other makers:** print-ready page/spread files and a guided upload (`references/other-companies.md`).
 
 ## Stage 7 · QR codes
-Offer a QR code per place that has a video album or itinerary doc (`make_qr.py` with dual-detector verification). Ask for each link, name it from the linked
-item's own date and place, and place it in the top margin (`x=1.0, y=0.22, s=1.92`) or on background with the layering rules: `references/qr-rules.md`.
-In Picabook (`PICABOOK_NATIVE_QR = True`), `picabook_layout.py` emits native vector QR codes (`הוסף קוד קישור`) plus a native `Heebo Unicode` caption (from `VIDEO_TITLES` or `title_he`) placed next to the QR code (falling back below if side margin is tight) and automatically shifts page headers to avoid collisions. A QR is always the top layer, never crosses a photo's edge, and opens direct links (with inline title editing) in the plan modal.
+1. **Finalize Android-safe per-video links once video selection is done (required before final QRs / editor push):**
+   - The default `photos.google.com/share/<album>/photo/<item>?key=...` URL from `fetch_album.py` only opens the specific video on Web and iOS — on **Android**, it opens the main album instead!
+   - Therefore, once the user finishes choosing which videos go in the book, open each selected video in Google Photos (signed-in browser via `/browser` or Chrome DevTools MCP) and click **Share** (`שתף`) → **Create link** (`צור קישור`) → **Create link** (`צור קישור`) → **Copy** (`העתק`) to get a standalone `https://photos.app.goo.gl/...` link for that individual video.
+   - Store each standalone link in `VIDEO_LINKS` (and/or `QR_CODES[...]["url"]`) in `album_config.py`, then re-run `make_qr.py` (auto-rebuilds source & upload QR images when URLs change), `picabook_layout.py`, `make_html.py`, and `check_book.py` (which blocks any remaining album-item `/share/.../photo/...` QR link).
+2. Offer a QR code per place that has a video or itinerary doc (`make_qr.py` with dual-detector verification). Name each QR file from the linked item's own date and place, and place it in the top margin (`x=1.0, y=0.22, s=1.92`) or on background with the layering rules: `references/qr-rules.md`.
+3. In Picabook (`PICABOOK_NATIVE_QR = True`), `picabook_layout.py` emits native vector QR codes (`הוסף קוד קישור`) plus a native `Heebo Unicode` caption (from `VIDEO_TITLES` or `title_he`) placed next to the QR code (falling back below if side margin is tight) and automatically shifts page headers to avoid collisions. A QR is always the top layer, never crosses a photo's edge, and opens direct links (with inline title editing) in the plan modal.
 
 ## Stage 8 · Final check, then the user orders
-1. `python3 check_book.py`: sharpness of every photo, cropping, overlaps, duplicates, native text bounds & non-repetition, QR size / trim / top layer / straddling. In Picabook also `claudePicabook.check()` (or visual spread pass); in Lupa `claudeLupa.check()`.
+1. `python3 check_book.py`: sharpness of every photo, cropping, overlaps, duplicates, native text bounds & non-repetition, QR size / trim / top layer / straddling / **Android-safe standalone video URLs** (fails if any QR still points to `photos.google.com/share/.../photo/...`). In Picabook also `claudePicabook.check()` (or visual spread pass); in Lupa `claudeLupa.check()`.
 2. Look at every spread in the editor (step through every `.pageArea` thumbnail in Picabook from `כריכה` down to `עמוד P`, or set page index in Lupa; screenshot each).
    Look for: hidden or cut text, boxes behind text, misplaced QR codes, empty areas, repeated headers.
 3. Spell-check every page title, the cover title and the spine text; keep one spelling of each word.

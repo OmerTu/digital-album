@@ -152,6 +152,13 @@ STATE_LABEL_AT: dict[str, tuple[float, float]] = {}  # US trips: move a state's 
 VIDEO_TITLES: dict[int, str] = {
     # 14: "סרטוני רומא",
 }
+# VIDEO_LINKS maps video # -> standalone Google Photos share link (https://photos.app.goo.gl/...)
+# created via Google Photos: open video -> Share -> Create link -> Create link -> Copy.
+# Required for every selected video QR code once video selection is final (the default album-item link
+# photos.google.com/share/<album>/photo/<item>?key=... opens the main album instead of the video on Android!).
+VIDEO_LINKS: dict[int, str] = {
+    # 14: "https://photos.app.goo.gl/XXXXXXXX",
+}
 QR_CODES: list[dict] = [
     # {"file": "ready/upload/qr_2026-05-02_rome.jpg", "src": "qr-codes/2026-05-02_rome.jpg", "bg": (255, 255, 255),
     #  "t": 41, "page": 12, "x": 1.0, "y": 0.22, "s": 1.92, "title_he": "סרטוני רומא", "video_n": 14,

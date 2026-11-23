@@ -79,9 +79,10 @@ For a book of `P` pages (where `P` is even, `24 <= P <= 100`, step `4`), the bot
 ## Push Procedure (Every Round)
 
 ### 1. Build upload files & Picabook layout JSON locally
-Run from the album folder:
+Before generating final QR codes, make sure every selected video has a standalone Android-safe link in `VIDEO_LINKS` / `QR_CODES` (Google Photos: open video → **Share** → **Create link** → **Create link** → **Copy**; never the album-item `/share/.../photo/...` URL). Then run from the album folder:
 ```bash
 python3 make_upload_set.py
+python3 make_qr.py
 python3 picabook_layout.py
 python3 make_html.py
 python3 check_book.py
